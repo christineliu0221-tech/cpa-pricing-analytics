@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CPA Pricing Analytics — Portfolio Demo</title>
+  <meta name="description" content="A privacy-conscious pricing analytics portfolio project for Taiwan CPA workflows, powered by explainable OLS regression." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="index.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <span class="logo-crown">👑</span>
+        <div>
+          <h1 class="logo-title">Princess CPA</h1>
+          <p class="logo-sub">智慧報價分析系統</p>
+        </div>
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-tab="data" id="tab-data">
+          <span class="tab-icon">📊</span> 歷史數據
+        </button>
+        <button class="nav-tab" data-tab="analysis" id="tab-analysis">
+          <span class="tab-icon">🔬</span> 回歸分析
+        </button>
+        <button class="nav-tab" data-tab="calculator" id="tab-calculator">
+          <span class="tab-icon">✨</span> 報價計算機
+        </button>
+        <button class="nav-tab" data-tab="guide" id="tab-guide">
+          <span class="tab-icon">📋</span> 資料指引
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <aside class="demo-notice" aria-label="Portfolio data notice">
+      <strong>Portfolio demo</strong>
+      <span>All companies and financial figures are synthetic. No client or confidential firm data is included.</span>
+    </aside>
+
+    <!-- ===== TAB: 歷史數據 ===== -->
+    <section class="tab-panel active" id="panel-data">
+      <div class="panel-header">
+        <h2>歷史報價數據庫</h2>
+        <p class="panel-desc">輸入或匯入過去案件的報價紀錄，作為回歸分析的訓練數據</p>
+      </div>
+
+      <!-- Service Type Selector -->
+      <div class="service-toggle">
+        <button class="svc-btn active" id="svc-bookkeeping" data-svc="bookkeeping">📒 每月記帳</button>
+        <button class="svc-btn" id="svc-audit" data-svc="audit">📋 稅務簽證（年度）</button>
+      </div>
+
+      <!-- Actions Bar -->
+      <div class="actions-bar">
+        <button class="btn btn-primary" id="btn-add-record">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          新增案件
+        </button>
+        <label class="btn btn-secondary" id="btn-import-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          匯入 CSV
+          <input type="file" id="csv-import" accept=".csv" style="display:none" />
+        </label>
+        <button class="btn btn-gs" id="btn-gs-open">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M3 9h18M9 21V9" />
+          </svg>
+          Google Sheets 匯入
+        </button>
+        <button class="btn btn-ghost" id="btn-export-csv">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          匯出 CSV
+        </button>
+        <button class="btn btn-ghost" id="btn-load-demo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          載入範例數據
+        </button>
+        <span class="record-count" id="record-count">共 0 筆</span>
+      </div>
+
+      <!-- Google Sheets URL Panel -->
+      <div class="gs-panel" id="gs-panel">
+        <div class="gs-panel-inner">
+          <div class="gs-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18M9 21V9" />
+            </svg>
+          </div>
+          <div class="gs-input-wrap">
+            <input type="url" id="gs-url" class="form-input"
+              placeholder="貼上 Google Sheets 發布網址（試算表中：檔案 → 共用 → 發布到網路 → CSV）" />
+          </div>
+          <button class="btn btn-primary" id="btn-gs-confirm">匯入</button>
+          <button class="btn btn-ghost" id="btn-gs-cancel">✕</button>
+        </div>
+        <p class="gs-hint">💡 步驟：Google Sheets → 「檔案」→「共用」→「發布到網路」→ 選「逗號分隔值(.csv)」→「發布」→ 複製連結</p>
+      </div>
+
+      <!-- Data Table -->
+      <div class="table-wrapper">
+        <table class="data-table" id="data-table">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">📂</div>
+          <p>尚無數據，請新增案件或匯入 CSV</p>
+          <button class="btn btn-primary btn-sm" id="btn-add-record-empty">新增第一筆案件</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TAB: 回歸分析 ===== -->
+    <section class="tab-panel" id="panel-analysis">
+      <div class="panel-header">
+        <h2>報價函數回歸分析</h2>
+        <p class="panel-desc">系統自動從歷史數據中找出最佳報價函數，並顯示各因子的影響程度</p>
+      </div>
+
+      <div class="service-toggle">
+        <button class="svc-btn active" id="analysis-svc-bookkeeping" data-svc="bookkeeping">📒 每月記帳</button>
+        <button class="svc-btn" id="analysis-svc-audit" data-svc="audit">📋 稅務簽證（年度）</button>
+      </div>
+
+      <div class="analysis-grid">
+        <!-- Model Summary -->
+        <div class="glass-card" id="model-summary">
+          <h3 class="card-title">📈 模型摘要</h3>
+          <div id="model-summary-content">
+            <div class="placeholder-msg">請先在「歷史數據」頁輸入至少 5 筆數據，再執行分析</div>
+          </div>
+          <button class="btn btn-primary btn-full" id="btn-run-analysis">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            執行回歸分析
+          </button>
+        </div>
+
+        <!-- Coefficients -->
+        <div class="glass-card" id="coefficients-card">
+          <h3 class="card-title">⚖️ 各因子係數</h3>
+          <div id="coefficients-content">
+            <div class="placeholder-msg">執行分析後顯示各影響因子的權重</div>
+          </div>
+        </div>
+
+        <!-- Formula Display -->
+        <div class="glass-card formula-card" id="formula-card">
+          <h3 class="card-title">🧮 報價公式</h3>
+          <div class="formula-box" id="formula-box">
+            <span class="formula-placeholder">回歸分析完成後，最佳報價公式將顯示於此</span>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="glass-card chart-card">
+          <h3 class="card-title">📉 實際 vs 預測報價</h3>
+          <div class="chart-wrapper">
+            <canvas id="analysis-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TAB: 報價計算機 ===== -->
+    <section class="tab-panel" id="panel-calculator">
+      <div class="panel-header">
+        <h2>新案件報價計算機</h2>
+        <p class="panel-desc">輸入新案件的各項因子，系統根據回歸模型給出建議報價</p>
+      </div>
+
+      <div class="service-toggle">
+        <button class="svc-btn active" id="calc-svc-bookkeeping" data-svc="bookkeeping">📒 每月記帳</button>
+        <button class="svc-btn" id="calc-svc-audit" data-svc="audit">📋 稅務簽證（年度）</button>
+      </div>
+
+      <div class="calculator-layout">
+        <div class="glass-card calc-inputs-card">
+          <h3 class="card-title">📝 案件資料輸入</h3>
+          <form id="calc-form" class="calc-form"></form>
+          <button class="btn btn-primary btn-full" id="btn-calculate">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="2" width="16" height="20" rx="2" />
+              <path d="M8 10h8M8 14h4" />
+            </svg>
+            計算建議報價
+          </button>
+        </div>
+
+        <div class="glass-card calc-result-card">
+          <h3 class="card-title">💰 報價建議</h3>
+          <div id="calc-result">
+            <div class="placeholder-msg">請先在左側輸入案件資料，並確認已執行回歸分析</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TAB: 資料指引 ===== -->
+    <section class="tab-panel" id="panel-guide">
+      <div class="panel-header">
+        <h2>📋 Excel 資料收集指引</h2>
+        <p class="panel-desc">建議的欄位格式，方便從 Excel 另存 CSV 後匯入系統</p>
+      </div>
+
+      <div class="guide-grid">
+        <div class="glass-card">
+          <h3 class="card-title">📒 記帳案件欄位說明</h3>
+          <table class="guide-table">
+            <thead>
+              <tr>
+                <th>欄位名稱</th>
+                <th>說明</th>
+                <th>格式 / 範圍</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>company</td>
+                <td>委任公司名稱</td>
+                <td>文字</td>
+              </tr>
+              <tr>
+                <td>date</td>
+                <td>委任年月</td>
+                <td>YYYY-MM</td>
+              </tr>
+              <tr>
+                <td>monthly_vouchers</td>
+                <td>每月憑證數量（張）</td>
+                <td>整數，如 200</td>
+              </tr>
+              <tr>
+                <td>revenue_level</td>
+                <td>月營業額等級</td>
+                <td>1=50萬以下, 2=50-200萬, 3=200-500萬, 4=500萬-1億, 5=1億以上</td>
+              </tr>
+              <tr>
+                <td>employee_count</td>
+                <td>員工人數</td>
+                <td>整數</td>
+              </tr>
+              <tr>
+                <td>industry</td>
+                <td>行業類別</td>
+                <td>1=服務業, 2=批發零售, 3=製造業, 4=建設業, 5=金融業, 6=其他, 7=控股投資公司, 8=投資顧問業</td>
+              </tr>
+              <tr>
+                <td>add_tax_vat</td>
+                <td>附加稅務申報（營業稅）</td>
+                <td>0=否, 1=是</td>
+              </tr>
+              <tr>
+                <td>add_tax_withholding</td>
+                <td>附加稅務申報（各類所得扣繳）</td>
+                <td>0=否, 1=是</td>
+              </tr>
+              <tr>
+                <td>add_invoice</td>
+                <td>附加發票開立</td>
+                <td>0=否, 1=是</td>
+              </tr>
+              <tr>
+                <td>add_payroll</td>
+                <td>附加薪資代算</td>
+                <td>0=否, 1=是</td>
+              </tr>
+              <tr>
+                <td>staff_quality</td>
+                <td>會計人員素質</td>
+                <td>10=A+, 9=A, 8=A-, 7=B+, 6=B, 5=B-, 4=C+, 3=C, 2=C-, 1=D</td>
+              </tr>
+              <tr>
+                <td>major_tax_issue</td>
+                <td>重大稅務調整事項</td>
+                <td>0=無, 1=有</td>
+              </tr>
+              <tr>
+                <td>price</td>
+                <td>月費報價（元）</td>
+                <td>整數，如 8000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="glass-card">
+          <h3 class="card-title">📋 稅務簽證案件欄位說明</h3>
+          <table class="guide-table">
+            <thead>
+              <tr>
+                <th>欄位名稱</th>
+                <th>說明</th>
+                <th>格式 / 範圍</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>company</td>
+                <td>委任公司名稱</td>
+                <td>文字</td>
+              </tr>
+              <tr>
+                <td>date</td>
+                <td>委任年月</td>
+                <td>YYYY-MM</td>
+              </tr>
+              <tr>
+                <td>total_assets</td>
+                <td>資產總額（萬元）</td>
+                <td>數字，如 500</td>
+              </tr>
+              <tr>
+                <td>annual_revenue</td>
+                <td>年度營業額（萬元）</td>
+                <td>數字，如 1200</td>
+              </tr>
+              <tr>
+                <td>industry</td>
+                <td>行業類別</td>
+                <td>1=服務業, 2=批發零售, 3=製造業, 4=建設業, 5=金融業, 6=其他, 7=控股投資公司, 8=投資顧問業</td>
+              </tr>
+              <tr>
+                <td>subsidiary_count</td>
+                <td>子/關係公司數量</td>
+                <td>整數</td>
+              </tr>
+              <tr>
+                <td>first_audit</td>
+                <td>是否首次查核</td>
+                <td>0=否, 1=是</td>
+              </tr>
+              <tr>
+                <td>staff_quality</td>
+                <td>會計人員素質</td>
+                <td>10=A+, 9=A, 8=A-, 7=B+, 6=B, 5=B-, 4=C+, 3=C, 2=C-, 1=D</td>
+              </tr>
+              <tr>
+                <td>major_tax_issue</td>
+                <td>重大稅務調整事項</td>
+                <td>0=無, 1=有</td>
+              </tr>
+              <tr>
+                <td>financial_audit</td>
+                <td>財務簽核（財報查核）</td>
+                <td>0=否, 1=是</td>
+              </tr>
+              <tr>
+                <td>audit_risk</td>
+                <td>查帳風險</td>
+                <td>1=低, 2=中, 3=高</td>
+              </tr>
+              <tr>
+                <td>price</td>
+                <td>年度報價（元）</td>
+                <td>整數，如 50000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="glass-card guide-tips-card">
+          <h3 class="card-title">💡 使用說明</h3>
+          <div class="tips-list">
+            <div class="tip-item">
+              <span class="tip-num">1</span>
+              <div>
+                <strong>在 Excel 中建立兩個分頁</strong>，分別對應「記帳案件」和「稅務簽證」，欄位名稱請完全照上表第一列填寫（英文欄位名）。
+              </div>
+            </div>
+            <div class="tip-item">
+              <span class="tip-num">2</span>
+              <div>
+                <strong>另存為 CSV 格式</strong>：Excel → 另存新檔 → CSV (逗號分隔)。每種案件類型分別存出一個 CSV 檔案。
+              </div>
+            </div>
+            <div class="tip-item">
+              <span class="tip-num">3</span>
+              <div>
+                <strong>最少需要 5 筆</strong>數據才能執行回歸分析，建議蒐集 10~20 筆以上，準確度會更高。
+              </div>
+            </div>
+            <div class="tip-item">
+              <span class="tip-num">4</span>
+              <div>
+                <strong>會計人員素質評分</strong>請依下表換算：
+                <div class="quality-badge-grid">
+                  <span class="qb qb-10">A+ = 10</span>
+                  <span class="qb qb-9">A = 9</span>
+                  <span class="qb qb-8">A- = 8</span>
+                  <span class="qb qb-7">B+ = 7</span>
+                  <span class="qb qb-6">B = 6</span>
+                  <span class="qb qb-5">B- = 5</span>
+                  <span class="qb qb-4">C+ = 4</span>
+                  <span class="qb qb-3">C = 3</span>
+                  <span class="qb qb-2">C- = 2</span>
+                  <span class="qb qb-1">D = 1</span>
+                </div>
+              </div>
+            </div>
+            <div class="tip-item">
+              <span class="tip-num">5</span>
+              <div>
+                <strong>也可以直接在系統中手動輸入</strong>，不一定要透過 CSV 匯入。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <h3 class="card-title">⬇️ 下載 CSV 範本</h3>
+          <div class="download-buttons">
+            <button class="btn btn-primary" id="btn-dl-bookkeeping-template">📒 下載記帳案件範本</button>
+            <button class="btn btn-secondary" id="btn-dl-audit-template">📋 下載稅務簽證範本</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: 新增/編輯案件 -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="record-modal">
+      <div class="modal-header">
+        <h3 id="modal-title">新增案件</h3>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="record-form" class="record-form"></form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-modal-cancel">取消</button>
+        <button class="btn btn-primary" id="btn-modal-save">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
