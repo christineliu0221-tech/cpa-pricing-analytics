@@ -1,0 +1,26 @@
+# Local and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Sensitive business data and local exports
+*.xlsx
+*.xls
+*.csv
+*.tsv
+*.db
+*.sqlite
+*.sqlite3
+*.env
+.env.*
+
+# Build and dependency artifacts
+node_modules/
+dist/
+build/
+__pycache__/
+*.pyc
+
+# Keep explicitly reviewed synthetic fixtures if added later
+!sample-data/*.csv
