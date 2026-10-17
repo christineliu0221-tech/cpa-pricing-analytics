@@ -131,6 +131,10 @@ function loadData() {
             const parsed = JSON.parse(raw);
             state.data.bookkeeping = parsed.bookkeeping || [];
             state.data.audit = parsed.audit || [];
+        } else {
+            // First visit: preload the synthetic demo dataset so reviewers can explore immediately.
+            state.data.bookkeeping = DEMO_DATA.bookkeeping.map(r => ({ ...r, id: uid() }));
+            state.data.audit = DEMO_DATA.audit.map(r => ({ ...r, id: uid() }));
         }
     } catch (e) { console.warn('Failed to load saved data', e); }
 }
@@ -554,7 +558,7 @@ function exportCSV(svcType) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `princess_cpa_${svcType}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `cpa_pricing_${svcType}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('CSV 已匯出 ✅');

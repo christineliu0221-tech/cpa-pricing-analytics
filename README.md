@@ -10,7 +10,7 @@ An explainable, browser-based pricing analytics prototype designed around the re
 
 Professional-service pricing often depends on fragmented historical records and experience-based judgment. This project explores a more consistent workflow: structure past engagements, model the factors that drive effort, and turn the result into an explainable pricing reference.
 
-The project combines my accounting-domain experience with hands-on product design, data modeling, and frontend engineering.
+The project combines my accounting-domain experience with AI-assisted product development: I framed the pricing problem and the engagement factors from CPA practice, and built the tool with AI coding assistants.
 
 ## What it does
 
@@ -55,9 +55,11 @@ Then open `index.html`, or serve the directory with any static web server.
 
 ## Using the demo
 
-1. Select **載入範例數據** to load the synthetic dataset.
-2. Open **回歸分析** to inspect model diagnostics and coefficients.
-3. Open **報價計算機** to enter a hypothetical engagement and view the estimate.
+The synthetic dataset loads automatically on your first visit.
+
+1. **歷史數據** (Historical data) shows the synthetic engagement records.
+2. Open **回歸分析** (Regression analysis) to inspect model diagnostics and coefficients.
+3. Open **報價計算機** (Fee calculator) to enter a hypothetical engagement and view the estimate.
 
 The product interface is intentionally in Traditional Chinese because it was designed for Taiwan CPA workflows. The repository documentation is in English for an international portfolio audience.
 
@@ -67,4 +69,4 @@ This is a portfolio prototype, not production pricing, accounting, tax, or audit
 
 ## Author
 
-Built by [Christine Liu](https://github.com/christineliu0221-tech), combining CPA-domain knowledge with data and software product development.
+Built by [Christine Liu](https://github.com/christineliu0221-tech) with AI coding assistants, combining CPA-domain knowledge with data-driven product thinking.
