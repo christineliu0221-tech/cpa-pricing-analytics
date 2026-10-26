@@ -9,19 +9,19 @@
 // ──────────────────────────────────────────────
 
 const INDUSTRIES = {
-    1: '服務業', 2: '批發零售', 3: '製造業',
-    4: '建設業', 5: '金融業', 6: '其他', 7: '控股投資公司', 8: '投資顧問業'
+    1: 'Services', 2: 'Wholesale & retail', 3: 'Manufacturing',
+    4: 'Construction', 5: 'Financial services', 6: 'Other', 7: 'Holding company', 8: 'Investment advisory'
 };
 
 const REVENUE_LEVELS = {
-    1: '50萬以下', 2: '50-200萬', 3: '200-500萬',
-    4: '500萬-1億', 5: '1億以上'
+    1: 'Under NT$0.5M', 2: 'NT$0.5M–2M', 3: 'NT$2M–5M',
+    4: 'NT$5M–100M', 5: 'Over NT$100M'
 };
 
-// 最低起價設定
+// Minimum fee per service (NT$)
 const MIN_PRICE = { bookkeeping: 2000, audit: 30000 };
 
-const AUDIT_RISK = { 1: '低', 2: '中', 3: '高' };
+const AUDIT_RISK = { 1: 'Low', 2: 'Medium', 3: 'High' };
 
 const QUALITY_LABELS = {
     10: 'A+', 9: 'A', 8: 'A-', 7: 'B+', 6: 'B',
@@ -37,22 +37,22 @@ const QUALITY_COLORS = {
 // Field schemas per service type
 const SCHEMAS = {
     bookkeeping: {
-        label: '每月記帳',
-        priceUnit: '元/月',
+        label: 'Monthly bookkeeping',
+        priceUnit: 'NT$ / month',
         fields: [
-            { key: 'company', label: '委任公司名稱', type: 'text', required: true },
-            { key: 'date', label: '委任年月', type: 'month', required: true },
-            { key: 'monthly_vouchers', label: '每月憑證數量（張）', type: 'number', required: true, min: 0 },
-            { key: 'revenue_level', label: '月營業額等級', type: 'select', required: true, options: REVENUE_LEVELS },
-            { key: 'employee_count', label: '員工人數', type: 'number', required: true, min: 0 },
-            { key: 'industry', label: '行業類別', type: 'select', required: true, options: INDUSTRIES },
-            { key: 'add_tax_vat', label: '附加稅務申報（營業稅）', type: 'bool', required: false },
-            { key: 'add_tax_withholding', label: '附加稅務申報（各類所得扣繳）', type: 'bool', required: false },
-            { key: 'add_invoice', label: '附加發票開立', type: 'bool', required: false },
-            { key: 'add_payroll', label: '附加薪資代算', type: 'bool', required: false },
-            { key: 'staff_quality', label: '會計人員素質', type: 'quality', required: true },
-            { key: 'major_tax_issue', label: '重大稅務調整事項', type: 'bool', required: false },
-            { key: 'price', label: '月費報價（元）', type: 'number', required: true, min: 0 },
+            { key: 'company', label: 'Client name', type: 'text', required: true },
+            { key: 'date', label: 'Engagement month', type: 'month', required: true },
+            { key: 'monthly_vouchers', label: 'Vouchers per month', type: 'number', required: true, min: 0 },
+            { key: 'revenue_level', label: 'Monthly revenue band', type: 'select', required: true, options: REVENUE_LEVELS },
+            { key: 'employee_count', label: 'Headcount', type: 'number', required: true, min: 0 },
+            { key: 'industry', label: 'Industry', type: 'select', required: true, options: INDUSTRIES },
+            { key: 'add_tax_vat', label: 'Business tax (VAT) filing', type: 'bool', required: false },
+            { key: 'add_tax_withholding', label: 'Withholding tax filing', type: 'bool', required: false },
+            { key: 'add_invoice', label: 'Invoice issuance', type: 'bool', required: false },
+            { key: 'add_payroll', label: 'Payroll processing', type: 'bool', required: false },
+            { key: 'staff_quality', label: 'Accounting staff quality', type: 'quality', required: true },
+            { key: 'major_tax_issue', label: 'Major tax adjustment', type: 'bool', required: false },
+            { key: 'price', label: 'Monthly fee (NT$)', type: 'number', required: true, min: 0 },
         ],
         // Fields used in regression (exclude identifiers)
         // Fields with too little variation are dropped automatically at analysis time (see MIN_VARIATION)
@@ -63,32 +63,32 @@ const SCHEMAS = {
         // Log model: ln(price) = b0 + b·x; counts enter as ln(1 + x)
         logModel: true,
         logFeatures: ['monthly_vouchers', 'employee_count'],
-        // 控股投資／投資顧問業的收費模式不同，其他行業在規模相同時差異不大
+        // Holding and investment-advisory clients price differently; other industries differ little at the same size
         industryEncoding: 'holding',
         featureLabels: {
-            monthly_vouchers: '月憑證數', revenue_level: '月營業額等級',
-            employee_count: '員工人數', industry: '控股／投資顧問業',
-            add_tax_vat: '附加稅務申報（營業稅）', add_tax_withholding: '附加稅務申報（扣繳）',
-            add_invoice: '附加發票開立',
-            add_payroll: '附加薪資代算', staff_quality: '會計素質（反向）',
-            major_tax_issue: '重大稅務調整'
+            monthly_vouchers: 'Monthly vouchers', revenue_level: 'Revenue band',
+            employee_count: 'Headcount', industry: 'Holding / investment advisory',
+            add_tax_vat: 'VAT filing', add_tax_withholding: 'Withholding filing',
+            add_invoice: 'Invoice issuance',
+            add_payroll: 'Payroll processing', staff_quality: 'Staff quality (inverted)',
+            major_tax_issue: 'Major tax adjustment'
         }
     },
     audit: {
-        label: '稅務簽證（年度）',
-        priceUnit: '元/年',
+        label: 'Annual tax attestation',
+        priceUnit: 'NT$ / year',
         fields: [
-            { key: 'company', label: '委任公司名稱', type: 'text', required: true },
-            { key: 'date', label: '委任年月', type: 'month', required: true },
-            { key: 'total_assets', label: '資產總額（萬元）', type: 'number', required: true, min: 0, hint: 'wan' },
-            { key: 'annual_revenue', label: '年度營業額（萬元）', type: 'number', required: true, min: 0, hint: 'wan' },
-            { key: 'industry', label: '行業類別', type: 'select', required: true, options: INDUSTRIES },
-            { key: 'first_audit', label: '是否首次查核', type: 'bool', required: false },
-            { key: 'staff_quality', label: '會計人員素質', type: 'quality', required: true },
-            { key: 'major_tax_issue', label: '重大稅務調整事項', type: 'bool', required: false },
-            { key: 'financial_audit', label: '財務簽核（財報查核）', type: 'bool', required: false },
-            { key: 'audit_risk', label: '查帳風險', type: 'select', required: true, options: AUDIT_RISK },
-            { key: 'price', label: '年度報價（元）', type: 'number', required: true, min: 0 },
+            { key: 'company', label: 'Client name', type: 'text', required: true },
+            { key: 'date', label: 'Engagement month', type: 'month', required: true },
+            { key: 'total_assets', label: 'Total assets (NT$10k)', type: 'number', required: true, min: 0, hint: 'wan' },
+            { key: 'annual_revenue', label: 'Annual revenue (NT$10k)', type: 'number', required: true, min: 0, hint: 'wan' },
+            { key: 'industry', label: 'Industry', type: 'select', required: true, options: INDUSTRIES },
+            { key: 'first_audit', label: 'First-year engagement', type: 'bool', required: false },
+            { key: 'staff_quality', label: 'Accounting staff quality', type: 'quality', required: true },
+            { key: 'major_tax_issue', label: 'Major tax adjustment', type: 'bool', required: false },
+            { key: 'financial_audit', label: 'Financial statement audit', type: 'bool', required: false },
+            { key: 'audit_risk', label: 'Tax audit risk', type: 'select', required: true, options: AUDIT_RISK },
+            { key: 'price', label: 'Annual fee (NT$)', type: 'number', required: true, min: 0 },
         ],
         // NOTE: first_audit & major_tax_issue temporarily excluded (near-zero coefficients with n=15)
         // Re-add when data reaches 25+ records
@@ -102,11 +102,11 @@ const SCHEMAS = {
         logModel: true,
         logFeatures: ['total_assets', 'annual_revenue'],
         featureLabels: {
-            total_assets: '資產總額', annual_revenue: '年度營業額',
-            industry: '行業別加權',
-            first_audit: '首次查核', staff_quality: '會計素質（反向）',
-            major_tax_issue: '重大稅務調整', financial_audit: '財務簽核',
-            audit_risk: '查帳風險'
+            total_assets: 'Total assets', annual_revenue: 'Annual revenue',
+            industry: 'Industry weight',
+            first_audit: 'First-year engagement', staff_quality: 'Staff quality (inverted)',
+            major_tax_issue: 'Major tax adjustment', financial_audit: 'Financial statement audit',
+            audit_risk: 'Tax audit risk'
         }
     }
 };
@@ -235,8 +235,8 @@ function multipleLinearRegression(X_raw, y) {
 
 /**
  * Encode one feature value for regression.
- * Industry is treated as a numeric "complexity weight" (3=製造, etc.),
- * or as a 0/1 flag for 控股投資／投資顧問業 when schema.industryEncoding === 'holding'
+ * Industry is treated as a numeric "complexity weight" (3 = manufacturing, etc.),
+ * or as a 0/1 flag for holding / investment-advisory clients when schema.industryEncoding === 'holding'
  * Staff quality is inverted: lower quality = more effort = higher price
  * Features listed in schema.logFeatures are transformed to ln(1 + x)
  */
@@ -256,7 +256,7 @@ function encodeFeatures(record, features, schema) {
 }
 
 // A feature needs at least this many records that differ from its most common value
-// to be estimated; otherwise it is left out (e.g. 營業稅 when every client has it)
+// to be estimated; otherwise it is left out (e.g. VAT filing when every client has it)
 const MIN_VARIATION = 5;
 
 function hasEnoughVariation(values) {
@@ -286,6 +286,12 @@ function crossValidate(X, price, logModel) {
     return { medianError: median, within25: errors.filter(e => e <= 0.25).length / errors.length };
 }
 
+function median(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 function runRegression(svcType) {
     const schema = SCHEMAS[svcType];
     const records = state.data[svcType];
@@ -306,6 +312,8 @@ function runRegression(svcType) {
     const result = multipleLinearRegression(X, y);
     if (!result) return null;
     result.cv = records.length >= 10 ? crossValidate(X, price, logModel) : null;
+    // Median client profile (encoded), used as the reference point in the calculator breakdown
+    result.reference = features.map((_, k) => median(X.map(row => row[k])));
 
     // Historical values of each numeric input, to warn when a quote is outside well-covered data
     result.featureValues = {};
@@ -378,13 +386,14 @@ function uid() {
     return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-// 萬元即時換算顯示
+// Live conversion of NT$10k units into a readable amount
 function formatWan(wan) {
     const n = parseFloat(wan);
     if (!n || isNaN(n) || n <= 0) return '';
-    if (n >= 10000) return `≈ NT$ ${(n / 10000).toFixed(2)} 億`;
-    if (n >= 1000) return `≈ NT$ ${(n / 1000).toFixed(1)} 千萬`;
-    return `≈ NT$ ${n.toLocaleString()} 萬`;
+    const ntd = n * 10000;
+    if (ntd >= 1e9) return `≈ NT$${(ntd / 1e9).toFixed(2)} billion`;
+    if (ntd >= 1e6) return `≈ NT$${(ntd / 1e6).toFixed(1)} million`;
+    return `≈ NT$${ntd.toLocaleString()}`;
 }
 
 // ──────────────────────────────────────────────
@@ -405,33 +414,33 @@ function showToast(msg, type = 'success') {
 // ──────────────────────────────────────────────
 
 const TABLE_COLUMNS_BOOKKEEPING = [
-    { key: 'company', label: '公司名稱' },
-    { key: 'date', label: '日期' },
-    { key: 'monthly_vouchers', label: '月憑證數' },
-    { key: 'revenue_level', label: '月營業額', render: v => REVENUE_LEVELS[v] || v },
-    { key: 'employee_count', label: '員工數' },
-    { key: 'industry', label: '行業', render: v => INDUSTRIES[v] || v },
-    { key: 'staff_quality', label: '會計素質', render: v => renderQuality(v) },
-    { key: 'major_tax_issue', label: '重大稅務', render: v => v == 1 ? '⚠️ 有' : '—' },
-    { key: 'add_tax_vat', label: '+營業稅', render: v => v == 1 ? '✓' : '—' },
-    { key: 'add_tax_withholding', label: '+扣繳', render: v => v == 1 ? '✓' : '—' },
-    { key: 'add_invoice', label: '+發票', render: v => v == 1 ? '✓' : '—' },
-    { key: 'add_payroll', label: '+薪資', render: v => v == 1 ? '✓' : '—' },
-    { key: 'price', label: '月費（元）', render: v => `<span class="price-cell">${Number(v).toLocaleString()}</span>` },
+    { key: 'company', label: 'Client' },
+    { key: 'date', label: 'Month' },
+    { key: 'monthly_vouchers', label: 'Vouchers' },
+    { key: 'revenue_level', label: 'Revenue band', render: v => REVENUE_LEVELS[v] || v },
+    { key: 'employee_count', label: 'Headcount' },
+    { key: 'industry', label: 'Industry', render: v => INDUSTRIES[v] || v },
+    { key: 'staff_quality', label: 'Staff quality', render: v => renderQuality(v) },
+    { key: 'major_tax_issue', label: 'Tax issue', render: v => v == 1 ? 'Yes' : '—' },
+    { key: 'add_tax_vat', label: 'VAT', render: v => v == 1 ? '✓' : '—' },
+    { key: 'add_tax_withholding', label: 'Withholding', render: v => v == 1 ? '✓' : '—' },
+    { key: 'add_invoice', label: 'Invoicing', render: v => v == 1 ? '✓' : '—' },
+    { key: 'add_payroll', label: 'Payroll', render: v => v == 1 ? '✓' : '—' },
+    { key: 'price', label: 'Fee (NT$/mo)', render: v => `<span class="price-cell">${Number(v).toLocaleString()}</span>` },
 ];
 
 const TABLE_COLUMNS_AUDIT = [
-    { key: 'company', label: '公司名稱' },
-    { key: 'date', label: '日期' },
-    { key: 'total_assets', label: '資產（萬）', render: v => Number(v).toLocaleString() },
-    { key: 'annual_revenue', label: '營收（萬）', render: v => Number(v).toLocaleString() },
-    { key: 'industry', label: '行業', render: v => INDUSTRIES[v] || v },
-    { key: 'first_audit', label: '首次查核', render: v => v == 1 ? '⭐ 是' : '—' },
-    { key: 'staff_quality', label: '會計素質', render: v => renderQuality(v) },
-    { key: 'major_tax_issue', label: '重大稅務', render: v => v == 1 ? '⚠️ 有' : '—' },
-    { key: 'financial_audit', label: '財務簽核', render: v => v == 1 ? '✓' : '—' },
-    { key: 'audit_risk', label: '查帳風險', render: v => ({ 1: '🟢 低', 2: '🟡 中', 3: '🔴 高' })[v] || v },
-    { key: 'price', label: '年度報價（元）', render: v => `<span class="price-cell">${Number(v).toLocaleString()}</span>` },
+    { key: 'company', label: 'Client' },
+    { key: 'date', label: 'Month' },
+    { key: 'total_assets', label: 'Assets (NT$10k)', render: v => Number(v).toLocaleString() },
+    { key: 'annual_revenue', label: 'Revenue (NT$10k)', render: v => Number(v).toLocaleString() },
+    { key: 'industry', label: 'Industry', render: v => INDUSTRIES[v] || v },
+    { key: 'first_audit', label: 'First year', render: v => v == 1 ? 'Yes' : '—' },
+    { key: 'staff_quality', label: 'Staff quality', render: v => renderQuality(v) },
+    { key: 'major_tax_issue', label: 'Tax issue', render: v => v == 1 ? 'Yes' : '—' },
+    { key: 'financial_audit', label: 'FS audit', render: v => v == 1 ? '✓' : '—' },
+    { key: 'audit_risk', label: 'Audit risk', render: v => AUDIT_RISK[v] || v },
+    { key: 'price', label: 'Fee (NT$/yr)', render: v => `<span class="price-cell">${Number(v).toLocaleString()}</span>` },
 ];
 
 function renderQuality(v) {
@@ -449,17 +458,17 @@ function renderTable(svcType) {
     const emptyState = document.getElementById('empty-state');
     const countEl = document.getElementById('record-count');
 
-    thead.innerHTML = `<tr>${cols.map(c => `<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
+    thead.innerHTML = `<tr>${cols.map(c => `<th>${c.label}</th>`).join('')}<th></th></tr>`;
 
     if (records.length === 0) {
         tbody.innerHTML = '';
         emptyState.style.display = 'flex';
-        countEl.textContent = '共 0 筆';
+        countEl.textContent = '0 records';
         return;
     }
 
     emptyState.style.display = 'none';
-    countEl.textContent = `共 ${records.length} 筆`;
+    countEl.textContent = `${records.length} record${records.length === 1 ? '' : 's'}`;
 
     tbody.innerHTML = records.map(record => {
         const cells = cols.map(col => {
@@ -471,8 +480,8 @@ function renderTable(svcType) {
       ${cells}
       <td>
         <div class="table-actions">
-          <button class="btn-icon" onclick="openEditModal('${record.id}','${svcType}')" title="編輯">✏️</button>
-          <button class="btn-icon delete" onclick="deleteRecord('${record.id}','${svcType}')" title="刪除">🗑️</button>
+          <button class="btn-icon" onclick="openEditModal('${record.id}','${svcType}')" title="Edit">Edit</button>
+          <button class="btn-icon delete" onclick="deleteRecord('${record.id}','${svcType}')" title="Delete">Delete</button>
         </div>
       </td>
     </tr>`;
@@ -505,13 +514,13 @@ function buildFormFields(svcType, record = {}) {
             const options = Object.entries(field.options).map(([k, v]) =>
                 `<option value="${k}" ${val == k ? 'selected' : ''}>${v}</option>`
             ).join('');
-            input = `<select class="form-select" id="field-${field.key}" name="${field.key}" ${field.required ? 'required' : ''}><option value="">請選擇</option>${options}</select>`;
+            input = `<select class="form-select" id="field-${field.key}" name="${field.key}" ${field.required ? 'required' : ''}><option value="">Select…</option>${options}</select>`;
         } else if (field.type === 'quality') {
             const qOptions = Array.from({ length: 10 }, (_, i) => {
                 const score = 10 - i;
-                return `<option value="${score}" ${val == score ? 'selected' : ''}>${QUALITY_LABELS[score]}（${score}分）</option>`;
+                return `<option value="${score}" ${val == score ? 'selected' : ''}>${QUALITY_LABELS[score]} (${score})</option>`;
             }).join('');
-            input = `<select class="form-select" id="field-${field.key}" name="${field.key}" ${field.required ? 'required' : ''}><option value="">請選擇</option>${qOptions}</select>`;
+            input = `<select class="form-select" id="field-${field.key}" name="${field.key}" ${field.required ? 'required' : ''}><option value="">Select…</option>${qOptions}</select>`;
         } else if (field.type === 'bool') {
             const checked = val == 1 ? 'checked' : '';
             input = `
@@ -530,7 +539,7 @@ function buildFormFields(svcType, record = {}) {
 
 function openAddModal(svcType) {
     state.editingId = null;
-    document.getElementById('modal-title').textContent = `新增${SCHEMAS[svcType].label}案件`;
+    document.getElementById('modal-title').textContent = `Add engagement — ${SCHEMAS[svcType].label}`;
     document.getElementById('record-form').innerHTML = buildFormFields(svcType);
     document.getElementById('modal-overlay').classList.add('open');
 }
@@ -539,7 +548,7 @@ function openEditModal(id, svcType) {
     const record = state.data[svcType].find(r => r.id === id);
     if (!record) return;
     state.editingId = id;
-    document.getElementById('modal-title').textContent = `編輯案件 — ${record.company}`;
+    document.getElementById('modal-title').textContent = `Edit engagement — ${record.company}`;
     document.getElementById('record-form').innerHTML = buildFormFields(svcType, record);
     document.getElementById('modal-overlay').classList.add('open');
 }
@@ -563,7 +572,7 @@ function saveRecord() {
             const el = form.querySelector(`[name="${field.key}"]`);
             if (!el) continue;
             if (field.required && !el.value.trim()) {
-                showToast(`請填寫「${field.label}」`, 'error');
+                showToast(`Please fill in "${field.label}"`, 'error');
                 el.focus();
                 return;
             }
@@ -574,10 +583,10 @@ function saveRecord() {
     if (state.editingId) {
         const idx = state.data[svcType].findIndex(r => r.id === state.editingId);
         state.data[svcType][idx] = { ...data, id: state.editingId };
-        showToast('案件已更新 ✅');
+        showToast('Engagement updated');
     } else {
         state.data[svcType].push({ ...data, id: uid() });
-        showToast('案件已新增 ✅');
+        showToast('Engagement added');
     }
 
     saveData();
@@ -586,11 +595,11 @@ function saveRecord() {
 }
 
 function deleteRecord(id, svcType) {
-    if (!confirm('確定要刪除這筆案件嗎？')) return;
+    if (!confirm('Delete this engagement?')) return;
     state.data[svcType] = state.data[svcType].filter(r => r.id !== id);
     saveData();
     renderTable(svcType);
-    showToast('案件已刪除', 'info');
+    showToast('Engagement deleted', 'info');
 }
 
 // ──────────────────────────────────────────────
@@ -606,7 +615,7 @@ function parseImportedRows(rows, svcType) {
             if (field.type === 'number' || field.type === 'select' || field.type === 'quality') {
                 record[field.key] = parseFloat(raw) || 0;
             } else if (field.type === 'bool') {
-                record[field.key] = (raw === '1' || raw === 'true' || raw === '是') ? 1 : 0;
+                record[field.key] = (raw === '1' || raw === 'true' || raw === 'yes' || raw === '是') ? 1 : 0;
             } else {
                 record[field.key] = raw || '';
             }
@@ -615,7 +624,7 @@ function parseImportedRows(rows, svcType) {
     });
 }
 
-// 已有資料時先詢問「取代」或「加在後面」，避免重複匯入
+// When data already exists, ask whether to replace or append so re-imports don't duplicate rows
 function applyImport(svcType, imported, sourceLabel) {
     const label = SCHEMAS[svcType].label;
     const commit = (mode) => {
@@ -627,15 +636,15 @@ function applyImport(svcType, imported, sourceLabel) {
         }
         saveData();
         renderTable(svcType);
-        const verb = mode === 'replace' ? '取代為' : '匯入';
-        showToast(`成功${sourceLabel}${verb} ${imported.length} 筆${label}數據 ✅`);
+        const verb = mode === 'replace' ? 'Replaced data with' : 'Imported';
+        showToast(`${verb} ${imported.length} ${label.toLowerCase()} records${sourceLabel}`);
     };
     const existing = state.data[svcType].length;
     if (existing === 0) { commit('append'); return; }
 
     document.getElementById('import-choice-text').innerHTML =
-        `目前已有 <strong>${existing}</strong> 筆${label}數據，這次要匯入 <strong>${imported.length}</strong> 筆。<br>` +
-        `如果是同一份檔案再匯入一次，請選「取代現有資料」，否則資料會重複。`;
+        `You already have <strong>${existing}</strong> ${label.toLowerCase()} records and this file has <strong>${imported.length}</strong>.<br>` +
+        `If you are re-importing the same file, choose <strong>Replace existing data</strong> to avoid duplicates.`;
     const overlay = document.getElementById('import-choice-overlay');
     overlay.classList.add('open');
     const close = () => {
@@ -644,20 +653,20 @@ function applyImport(svcType, imported, sourceLabel) {
     };
     document.getElementById('btn-import-replace').onclick = () => { close(); commit('replace'); };
     document.getElementById('btn-import-append').onclick = () => { close(); commit('append'); };
-    document.getElementById('btn-import-cancel').onclick = () => { close(); showToast('已取消匯入', 'info'); };
-    overlay.onclick = e => { if (e.target === overlay) { close(); showToast('已取消匯入', 'info'); } };
+    document.getElementById('btn-import-cancel').onclick = () => { close(); showToast('Import cancelled', 'info'); };
+    overlay.onclick = e => { if (e.target === overlay) { close(); showToast('Import cancelled', 'info'); } };
 }
 
 function clearData(svcType) {
     const label = SCHEMAS[svcType].label;
     const n = state.data[svcType].length;
-    if (n === 0) { showToast(`目前沒有${label}數據`, 'info'); return; }
-    if (!confirm(`確定要清空全部 ${n} 筆${label}數據嗎？\n此動作無法復原，建議先按「匯出 CSV」備份。`)) return;
+    if (n === 0) { showToast(`There is no ${label.toLowerCase()} data to clear`, 'info'); return; }
+    if (!confirm(`Clear all ${n} ${label.toLowerCase()} records?\nThis cannot be undone. Use Export CSV first if you need a backup.`)) return;
     state.data[svcType] = [];
     state.models[svcType] = null;
     saveData();
     renderTable(svcType);
-    showToast(`已清空${label}數據`);
+    showToast(`${label} data cleared`);
 }
 
 function importCSV(file, svcType) {
@@ -666,16 +675,16 @@ function importCSV(file, svcType) {
         skipEmptyLines: true,
         complete: (results) => {
             const imported = parseImportedRows(results.data, svcType);
-            applyImport(svcType, imported, '');
+            applyImport(svcType, imported, ' from CSV');
         },
-        error: () => showToast('CSV 解析失敗，請確認格式正確', 'error')
+        error: () => showToast('Could not parse the CSV. Check the file format.', 'error')
     });
 }
 
 function exportCSV(svcType) {
     const schema = SCHEMAS[svcType];
     const records = state.data[svcType];
-    if (records.length === 0) { showToast('目前無數據可匯出', 'info'); return; }
+    if (records.length === 0) { showToast('No data to export', 'info'); return; }
     const headers = schema.fields.map(f => f.key).join(',');
     const rows = records.map(r => schema.fields.map(f => {
         const v = r[f.key] ?? '';
@@ -689,7 +698,7 @@ function exportCSV(svcType) {
     a.download = `cpa_pricing_${svcType}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('CSV 已匯出 ✅');
+    showToast('CSV exported');
 }
 
 function csvCell(v) {
@@ -697,11 +706,11 @@ function csvCell(v) {
     return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
-// 每家客戶的實際報價 vs 模型預測，依差距% 由低到高排序（最偏低的在最上面）
+// Actual fee vs. model estimate per client, sorted by gap % (most underpriced first)
 function exportGapCSV() {
     const svcType = state.activeService.analysis;
     const model = state.models[svcType];
-    if (!model) { showToast('請先執行回歸分析，再匯出差距表', 'info'); return; }
+    if (!model) { showToast('Run the regression first, then export the gap report', 'info'); return; }
     const schema = SCHEMAS[svcType];
     const spread = model.logModel ? Math.exp(1.5 * model.logRmse) : null;
     const rows = model.records.map((r, i) => {
@@ -709,11 +718,11 @@ function exportGapCSV() {
         const low = model.logModel ? pred / spread : pred - 1.5 * model.rmse;
         const high = model.logModel ? pred * spread : pred + 1.5 * model.rmse;
         const gap = r.price - pred;
-        const status = r.price < low ? '偏低（低於合理區間）' : r.price > high ? '偏高（高於合理區間）' : '合理範圍內';
+        const status = r.price < low ? 'Below range' : r.price > high ? 'Above range' : 'Within range';
         return { ...r, pred, low, high, gap, gapPct: gap / pred, status };
     }).sort((a, b) => a.gapPct - b.gapPct);
 
-    const headers = ['公司名稱', '日期', '實際報價', '模型預測', '合理區間下限', '合理區間上限', '差距（實際-預測）', '差距%', '判斷'];
+    const headers = ['Client', 'Month', 'Actual fee', 'Model estimate', 'Range low', 'Range high', 'Gap (actual - estimate)', 'Gap %', 'Flag'];
     const lines = rows.map(r => [
         r.company, r.date, Math.round(r.price), Math.round(r.pred),
         Math.round(Math.max(0, r.low)), Math.round(r.high), Math.round(r.gap),
@@ -724,12 +733,12 @@ function exportGapCSV() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `報價差距_${schema.label.replace(/[（）()]/g, '')}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `fee_gap_${svcType}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    const low = rows.filter(r => r.status.startsWith('偏低')).length;
-    const high = rows.filter(r => r.status.startsWith('偏高')).length;
-    showToast(`已匯出 ${rows.length} 家差距表（偏低 ${low} 家、偏高 ${high} 家）✅`);
+    const low = rows.filter(r => r.status === 'Below range').length;
+    const high = rows.filter(r => r.status === 'Above range').length;
+    showToast(`Exported ${rows.length} clients (${low} below range, ${high} above range)`);
 }
 
 // ──────────────────────────────────────────────
@@ -751,7 +760,7 @@ function closeGsPanel() {
 async function importFromGoogleSheets() {
     const svcType = state.activeService.data;
     let url = document.getElementById('gs-url').value.trim();
-    if (!url) { showToast('請貼上 Google Sheets 網址', 'error'); return; }
+    if (!url) { showToast('Paste a Google Sheets link first', 'error'); return; }
 
     // Auto-convert edit URL → publish CSV URL
     if (!url.includes('/pub') && !url.includes('output=csv')) {
@@ -759,15 +768,15 @@ async function importFromGoogleSheets() {
         if (idMatch) {
             url = `https://docs.google.com/spreadsheets/d/${idMatch[1]}/pub?output=csv`;
         } else {
-            showToast('網址格式不正確，請確認是 Google Sheets 網址', 'error');
+            showToast('That does not look like a Google Sheets link', 'error');
             return;
         }
     }
 
-    showToast('正在從 Google Sheets 抓取數據⋯', 'info');
+    showToast('Fetching data from Google Sheets…', 'info');
     const btn = document.getElementById('btn-gs-confirm');
     btn.disabled = true;
-    btn.textContent = '抓取中⋯';
+    btn.textContent = 'Fetching…';
 
     try {
         const response = await fetch(url);
@@ -780,15 +789,15 @@ async function importFromGoogleSheets() {
             complete: (results) => {
                 const imported = parseImportedRows(results.data, svcType);
                 closeGsPanel();
-                applyImport(svcType, imported, '從 Google Sheets ');
+                applyImport(svcType, imported, ' from Google Sheets');
             }
         });
     } catch (err) {
-        showToast('匯入失敗：請確認試算表已「發布到網路」且網址正確', 'error');
+        showToast('Import failed. Make sure the sheet is published to the web and the link is correct.', 'error');
         console.error('[GS Import Error]', err);
     } finally {
         btn.disabled = false;
-        btn.textContent = '匯入';
+        btn.textContent = 'Import';
     }
 }
 
@@ -796,7 +805,7 @@ function downloadTemplate(svcType) {
     const schema = SCHEMAS[svcType];
     const headers = schema.fields.map(f => f.key).join(',');
     const sampleRow = schema.fields.map(f => {
-        if (f.type === 'text') return f.key === 'company' ? '範例公司名稱' : '';
+        if (f.type === 'text') return f.key === 'company' ? 'Sample Client Ltd.' : '';
         if (f.type === 'date') return '2024-01-01';
         if (f.type === 'bool') return '0';
         if (f.type === 'quality') return '7';
@@ -812,7 +821,7 @@ function downloadTemplate(svcType) {
     a.download = `template_${svcType}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast(`${SCHEMAS[svcType].label}範本已下載 ✅`);
+    showToast(`${SCHEMAS[svcType].label} template downloaded`);
 }
 
 // ──────────────────────────────────────────────
@@ -823,11 +832,11 @@ function runAnalysis() {
     const svcType = state.activeService.analysis;
     const records = state.data[svcType];
     if (records.length < 5) {
-        showToast(`需要至少 5 筆${SCHEMAS[svcType].label}數據才能分析`, 'error');
+        showToast(`At least 5 ${SCHEMAS[svcType].label.toLowerCase()} records are needed`, 'error');
         return;
     }
     const model = runRegression(svcType);
-    if (!model) { showToast('回歸分析失敗，請確認數據格式', 'error'); return; }
+    if (!model) { showToast('Regression failed. Check the data format.', 'error'); return; }
     state.models[svcType] = model;
     renderModelSummary(model, svcType);
     renderCoefficients(model, svcType);
@@ -835,33 +844,33 @@ function runAnalysis() {
     renderAnalysisChart(model, records, svcType);
     // The calculator only asks for factors the fitted model uses
     if (state.activeService.calculator === svcType) buildCalculatorForm(svcType);
-    showToast('回歸分析完成 🎉', 'success');
+    showToast('Regression complete', 'success');
 }
 
 function renderModelSummary(model, svcType) {
     const r2 = (model.rSquared * 100).toFixed(1);
     const adjR2 = model.adjustedRSquared !== null
         ? (model.adjustedRSquared * 100).toFixed(1) + '%'
-        : '<span style="font-size:12px;color:#f87171" title="樣本數不足以計算此指標（建議增加數據至少達因子數+2筆以上）">N/A ⚠️</span>';
+        : '<span style="font-size:13px;color:var(--negative)" title="Too few records for this statistic (need at least factors + 2)">N/A</span>';
     const rmse = Math.round(model.rmse).toLocaleString();
     const n = state.data[svcType].length;
     const schema = SCHEMAS[svcType];
     const cvStats = model.cv ? `
-      <div class="stat-item" title="每次拿掉一筆、用其餘資料建模後預測它；比 R² 更接近實際報價的準確度"><div class="stat-label">驗證誤差（中位數）</div><div class="stat-value">${(model.cv.medianError * 100).toFixed(1)}%</div></div>
-      <div class="stat-item" title="交叉驗證下，預測值落在實際公費 ±25% 內的比例"><div class="stat-label">±25% 內命中</div><div class="stat-value">${Math.round(model.cv.within25 * 100)}%</div></div>` : '';
+      <div class="stat-item" title="Leave-one-out: each client is predicted by a model fitted without it. A more honest accuracy measure than R²."><div class="stat-label">CV error (median)</div><div class="stat-value">${(model.cv.medianError * 100).toFixed(1)}%</div></div>
+      <div class="stat-item" title="Share of clients whose cross-validated estimate is within ±25% of the actual fee"><div class="stat-label">Within ±25%</div><div class="stat-value">${Math.round(model.cv.within25 * 100)}%</div></div>` : '';
     const dropped = model.droppedFeatures.length > 0
-        ? `<div class="model-note">資料變化不足、未納入模型：${model.droppedFeatures.map(k => schema.featureLabels[k] || k).join('、')}（不同值少於 ${MIN_VARIATION} 筆）</div>`
+        ? `<div class="model-note">Left out for too little variation (fewer than ${MIN_VARIATION} records differ): ${model.droppedFeatures.map(k => schema.featureLabels[k] || k).join(', ')}</div>`
         : '';
     document.getElementById('model-summary-content').innerHTML = `
     <div class="model-stats">
-      <div class="stat-item"><div class="stat-label">樣本數</div><div class="stat-value">${n}</div></div>
+      <div class="stat-item"><div class="stat-label">Records</div><div class="stat-value">${n}</div></div>
       <div class="stat-item"><div class="stat-label">Adj. R²</div><div class="stat-value">${adjR2}</div></div>
-      <div class="stat-item"><div class="stat-label">RMSE</div><div class="stat-value" style="font-size:16px">${rmse}</div></div>
+      <div class="stat-item"><div class="stat-label">RMSE</div><div class="stat-value">${rmse}</div></div>
       <div class="stat-item"><div class="stat-label">R²</div><div class="stat-value">${r2}%</div></div>${cvStats}
     </div>
     ${dropped}
     <div class="r2-bar-wrap">
-      <div class="r2-bar-label"><span>模型解釋力 R²</span><span>${r2}%</span></div>
+      <div class="r2-bar-label"><span>Variance explained (R²)</span><span>${r2}%</span></div>
       <div class="r2-bar"><div class="r2-bar-fill" style="width:0%" id="r2-fill"></div></div>
     </div>`;
     setTimeout(() => {
@@ -893,7 +902,7 @@ function renderCoefficients(model, svcType) {
             ? `<div class="coef-bar-pos" style="width:${pct}%"></div>`
             : `<div class="coef-bar-neg" style="width:${pct}%"></div>`;
         const label = schema.featureLabels[key] || key;
-        const name = model.logModel && (schema.logFeatures || []).includes(key) ? `${label}（加倍）` : label;
+        const name = model.logModel && (schema.logFeatures || []).includes(key) ? `${label} (×2)` : label;
         const value = model.logModel ? `${coef.toFixed(1)}%` : coef.toFixed(1);
         return `<div class="coef-item">
       <span class="coef-name">${name}</span>
@@ -903,12 +912,12 @@ function renderCoefficients(model, svcType) {
     }).join('');
     const base = model.logModel
         ? `<div class="coef-item">
-        <span class="coef-name">對數截距 ln(報價)</span>
+        <span class="coef-name">Intercept, ln(fee)</span>
         <div class="coef-bar-wrap"><div class="coef-bar-pos" style="width:30%"></div></div>
         <span class="coef-value contribution-base">${model.intercept.toFixed(3)}</span>
       </div>`
         : `<div class="coef-item">
-        <span class="coef-name">基準報價（截距）</span>
+        <span class="coef-name">Base fee (intercept)</span>
         <div class="coef-bar-wrap"><div class="coef-bar-pos" style="width:30%"></div></div>
         <span class="coef-value contribution-base">${Math.round(model.intercept).toLocaleString()}</span>
       </div>`;
@@ -929,18 +938,18 @@ function renderFormula(model, svcType) {
         const term = model.logModel && (schema.logFeatures || []).includes(key) ? `ln(1 + ${label})` : label;
         return `  ${sign} ${Math.abs(coef).toFixed(model.logModel ? 4 : 2)} × [${term}]`;
     }).join('\n');
-    const lhs = model.logModel ? `ln(報價（${unit}）)` : `報價（${unit}）`;
+    const lhs = model.logModel ? `ln(fee, ${unit})` : `fee (${unit})`;
     const base = model.logModel ? model.intercept.toFixed(4) : Math.round(model.intercept).toLocaleString();
     document.getElementById('formula-box').innerHTML = `
-    <pre style="white-space:pre-wrap;font-size:13px;line-height:1.9;color:#34d399">${lhs} =
-  ${base}（基準）
+    <pre style="white-space:pre-wrap;font-size:13px;line-height:1.9;color:var(--navy)">${lhs} =
+  ${base}  (intercept)
 ${terms}</pre>`;
 }
 
 function renderAnalysisChart(model, records, svcType) {
     const actual = records.map(r => parseFloat(r.price));
     const predicted = model.predictions;
-    const labels = records.map(r => r.company.slice(0, 8));
+    const labels = records.map(r => r.company.replace(/\s*\(Demo\)$/, ''));
 
     if (state.chart) { state.chart.destroy(); }
 
@@ -951,20 +960,18 @@ function renderAnalysisChart(model, records, svcType) {
             labels,
             datasets: [
                 {
-                    label: '實際報價',
+                    label: 'Actual fee',
                     data: actual,
-                    backgroundColor: 'rgba(168,85,247,0.6)',
-                    borderColor: 'rgba(168,85,247,1)',
-                    borderWidth: 1,
-                    borderRadius: 4,
+                    backgroundColor: '#1f3a5f',
+                    borderWidth: 0,
+                    borderRadius: 2,
                 },
                 {
-                    label: '模型預測',
+                    label: 'Model estimate',
                     data: predicted,
-                    backgroundColor: 'rgba(52,211,153,0.6)',
-                    borderColor: 'rgba(52,211,153,1)',
-                    borderWidth: 1,
-                    borderRadius: 4,
+                    backgroundColor: '#5fb3a9',
+                    borderWidth: 0,
+                    borderRadius: 2,
                     type: 'bar',
                 }
             ]
@@ -973,7 +980,7 @@ function renderAnalysisChart(model, records, svcType) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { labels: { color: '#a0a0c0', font: { family: 'Inter' } } },
+                legend: { position: 'top', align: 'end', labels: { color: '#4b5563', boxWidth: 12, boxHeight: 12, font: { family: 'Inter', size: 12 } } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => `${ctx.dataset.label}: NT$${Number(ctx.raw).toLocaleString()}`
@@ -981,13 +988,15 @@ function renderAnalysisChart(model, records, svcType) {
                 }
             },
             scales: {
-                x: { ticks: { color: '#5a5a7a', maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                x: { ticks: { color: '#6b7280', maxRotation: 45, font: { family: 'Inter', size: 11 } }, grid: { display: false } },
                 y: {
                     ticks: {
-                        color: '#5a5a7a',
-                        callback: v => `$${(v / 1000).toFixed(0)}K`
+                        color: '#6b7280',
+                        font: { family: 'Inter', size: 11 },
+                        callback: v => `NT$${(v / 1000).toFixed(0)}k`
                     },
-                    grid: { color: 'rgba(255,255,255,0.06)' }
+                    grid: { color: '#e5e7eb' },
+                    border: { display: false }
                 }
             }
         }
@@ -1009,16 +1018,16 @@ function buildCalculatorForm(svcType) {
     const otherInputs = otherFields.map(field => {
         let input = '';
         if (field.type === 'number') {
-            input = `<input class="form-input" type="number" id="calc-${field.key}" min="0" step="any" placeholder="輸入數值" />`;
+            input = `<input class="form-input" type="number" id="calc-${field.key}" min="0" step="any" placeholder="Enter a value" />`;
         } else if (field.type === 'select') {
             const opts = Object.entries(field.options).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-            input = `<select class="form-select" id="calc-${field.key}"><option value="">請選擇</option>${opts}</select>`;
+            input = `<select class="form-select" id="calc-${field.key}"><option value="">Select…</option>${opts}</select>`;
         } else if (field.type === 'quality') {
             const opts = Array.from({ length: 10 }, (_, i) => {
                 const s = 10 - i;
-                return `<option value="${s}">${QUALITY_LABELS[s]}（${s}分）</option>`;
+                return `<option value="${s}">${QUALITY_LABELS[s]} (${s})</option>`;
             }).join('');
-            input = `<select class="form-select" id="calc-${field.key}"><option value="">請選擇</option>${opts}</select>`;
+            input = `<select class="form-select" id="calc-${field.key}"><option value="">Select…</option>${opts}</select>`;
         }
         return `<div class="form-group">
       <label class="form-label" for="calc-${field.key}">${field.label}</label>
@@ -1028,7 +1037,7 @@ function buildCalculatorForm(svcType) {
 
     const boolGrid = boolFields.length > 0 ? `
     <div class="form-group" style="grid-column:1/-1">
-      <label class="form-label">附加條件</label>
+      <label class="form-label">Engagement characteristics</label>
       <div class="checkbox-group">
         ${boolFields.map(f => `
           <label class="checkbox-item">
@@ -1049,7 +1058,7 @@ function calculatePrice() {
     const svcType = state.activeService.calculator;
     const model = state.models[svcType];
     if (!model) {
-        showToast('請先在「回歸分析」頁執行分析', 'error');
+        showToast('Run the regression on the Model Analysis tab first', 'error');
         return;
     }
     const schema = SCHEMAS[svcType];
@@ -1078,9 +1087,12 @@ function calculatePrice() {
         const s = model.logRmse;
         low = Math.max(minPrice, Math.round(predicted * Math.exp(-1.5 * s)));
         high = Math.round(predicted * Math.exp(1.5 * s));
-        baseText = `NT$${Math.round(Math.exp(model.intercept)).toLocaleString()}`;
+        // Start from the median client and show each factor's multiplier relative to it
+        const ref = model.reference;
+        const refLinear = model.intercept + ref.reduce((s, v, i) => s + v * model.coefficients[i], 0);
+        baseText = `NT$${Math.round(Math.exp(refLinear)).toLocaleString()}`;
         contributions = features.map((key, i) => {
-            const mult = Math.exp(encoded[i] * model.coefficients[i]);
+            const mult = Math.exp((encoded[i] - ref[i]) * model.coefficients[i]);
             return { label: schema.featureLabels[key] || key, positive: mult >= 1, text: `×${mult.toFixed(2)}` };
         });
     } else {
@@ -1106,33 +1118,33 @@ function calculatePrice() {
         const label = schema.featureLabels[key] || key;
         const atLeast = history.filter(v => v >= val).length;
         const atMost = history.filter(v => v <= val).length;
-        if (atLeast < MIN_COMPARABLE) return `${label} ${val.toLocaleString()}：歷史資料中只有 ${atLeast} 家達到這個規模（最高 ${Math.max(...history).toLocaleString()}）`;
-        if (atMost < MIN_COMPARABLE) return `${label} ${val.toLocaleString()}：歷史資料中只有 ${atMost} 家這麼小（最低 ${Math.min(...history).toLocaleString()}）`;
+        if (atLeast < MIN_COMPARABLE) return `${label} ${val.toLocaleString()}: only ${atLeast} past client${atLeast === 1 ? ' is' : 's are'} this large (max ${Math.max(...history).toLocaleString()})`;
+        if (atMost < MIN_COMPARABLE) return `${label} ${val.toLocaleString()}: only ${atMost} past client${atMost === 1 ? ' is' : 's are'} this small (min ${Math.min(...history).toLocaleString()})`;
         return null;
     }).filter(Boolean);
     const warningHtml = rangeWarnings.length > 0 ? `
       <div class="price-warning">
-        <div class="price-warning-title">⚠️ 超出模型資料範圍，建議價僅供參考，請個別評估</div>
+        <div class="price-warning-title">Outside the range of the historical data — treat this estimate as indicative and review it individually</div>
         ${rangeWarnings.map(w => `<div>${w}</div>`).join('')}
       </div>` : '';
 
     document.getElementById('calc-result').innerHTML = `
     <div class="calc-result-main">
       <div class="price-display">
-        <div class="price-label">${SCHEMAS[svcType].label} — 建議報價</div>
+        <div class="price-label">${SCHEMAS[svcType].label} — indicative fee</div>
         <div class="price-amount">NT$${price.toLocaleString()}</div>
         <div class="price-unit">${SCHEMAS[svcType].priceUnit}</div>
       </div>
       ${warningHtml}
       <div class="price-range" style="width:100%">
-        <div class="price-range-label">建議區間（±1.5σ）</div>
-        <div class="price-range-value">NT$${low.toLocaleString()} ～ NT$${high.toLocaleString()}</div>
+        <div class="price-range-label">Suggested range (±1.5σ)</div>
+        <div class="price-range-value">NT$${low.toLocaleString()} – NT$${high.toLocaleString()}</div>
       </div>
       <div class="factor-breakdown" style="width:100%">
-        <div class="factor-breakdown-title">各因子貢獻</div>
+        <div class="factor-breakdown-title">Contribution by factor${model.logModel ? ' (vs. the median client)' : ''}</div>
         <div class="factor-breakdown-list">
           <div class="factor-row">
-            <span class="factor-row-name">基準報價</span>
+            <span class="factor-row-name">${model.logModel ? 'Median client fee' : 'Base fee'}</span>
             <span class="factor-row-contribution contribution-base">${baseText}</span>
           </div>
           ${contributions.map(c => {
@@ -1220,11 +1232,11 @@ function init() {
     // Demo data
     document.getElementById('btn-load-demo').addEventListener('click', () => {
         const svc = state.activeService.data;
-        if (state.data[svc].length > 0 && !confirm(`這將新增${DEMO_DATA[svc].length}筆範例數據（不影響現有數據），確認繼續嗎？`)) return;
+        if (state.data[svc].length > 0 && !confirm(`Add ${DEMO_DATA[svc].length} sample records to the existing data?`)) return;
         state.data[svc] = [...state.data[svc], ...DEMO_DATA[svc].map(r => ({ ...r, id: uid() }))];
         saveData();
         renderTable(svc);
-        showToast(`已載入 ${DEMO_DATA[svc].length} 筆範例數據 🎉`);
+        showToast(`Loaded ${DEMO_DATA[svc].length} sample records`);
     });
 
     // Clear data

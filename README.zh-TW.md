@@ -16,5 +16,6 @@
 - 匯入時可選擇取代或附加，並可一鍵清空資料
 - 支援 CSV 與已發布的 Google Sheets CSV 資料
 - 純前端架構，無後端、無建置步驟，可部署於 GitHub Pages
+- 介面為英文，採淺色顧問風配色，方便國際讀者瀏覽
 
 詳細技術與產品說明請見 [English README](README.md)。

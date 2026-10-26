@@ -61,11 +61,11 @@ Then open `index.html`, or serve the directory with any static web server.
 
 The synthetic dataset loads automatically on your first visit.
 
-1. **歷史數據** (Historical data) shows the synthetic engagement records.
-2. Open **回歸分析** (Regression analysis) to inspect model diagnostics and coefficients.
-3. Open **報價計算機** (Fee calculator) to enter a hypothetical engagement and view the estimate.
+1. **Engagement Data** shows the synthetic engagement records.
+2. Open **Model Analysis**, pick a service and run the regression to see diagnostics, factor effects and the fitted equation.
+3. Open **Fee Calculator** to describe a hypothetical engagement and see the indicative fee, its range, and how each factor moves it relative to the median client.
 
-The product interface is intentionally in Traditional Chinese because it was designed for Taiwan CPA workflows. The repository documentation is in English for an international portfolio audience.
+Amounts are in New Taiwan dollars (NT$); asset and revenue inputs for tax attestation are in NT$10k, the unit Taiwan firms typically use.
 
 ## Why a log model
 
