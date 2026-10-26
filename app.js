@@ -55,13 +55,19 @@ const SCHEMAS = {
             { key: 'price', label: '月費報價（元）', type: 'number', required: true, min: 0 },
         ],
         // Fields used in regression (exclude identifiers)
+        // Fields with too little variation are dropped automatically at analysis time (see MIN_VARIATION)
         regressionFeatures: [
             'monthly_vouchers', 'revenue_level', 'employee_count', 'industry',
             'add_tax_vat', 'add_tax_withholding', 'add_invoice', 'add_payroll', 'staff_quality', 'major_tax_issue'
         ],
+        // Log model: ln(price) = b0 + b·x; counts enter as ln(1 + x)
+        logModel: true,
+        logFeatures: ['monthly_vouchers', 'employee_count'],
+        // 控股投資／投資顧問業的收費模式不同，其他行業在規模相同時差異不大
+        industryEncoding: 'holding',
         featureLabels: {
             monthly_vouchers: '月憑證數', revenue_level: '月營業額等級',
-            employee_count: '員工人數', industry: '行業別加權',
+            employee_count: '員工人數', industry: '控股／投資顧問業',
             add_tax_vat: '附加稅務申報（營業稅）', add_tax_withholding: '附加稅務申報（扣繳）',
             add_invoice: '附加發票開立',
             add_payroll: '附加薪資代算', staff_quality: '會計素質（反向）',
@@ -77,7 +83,6 @@ const SCHEMAS = {
             { key: 'total_assets', label: '資產總額（萬元）', type: 'number', required: true, min: 0, hint: 'wan' },
             { key: 'annual_revenue', label: '年度營業額（萬元）', type: 'number', required: true, min: 0, hint: 'wan' },
             { key: 'industry', label: '行業類別', type: 'select', required: true, options: INDUSTRIES },
-            { key: 'subsidiary_count', label: '子/關係公司數量', type: 'number', required: true, min: 0 },
             { key: 'first_audit', label: '是否首次查核', type: 'bool', required: false },
             { key: 'staff_quality', label: '會計人員素質', type: 'quality', required: true },
             { key: 'major_tax_issue', label: '重大稅務調整事項', type: 'bool', required: false },
@@ -87,13 +92,18 @@ const SCHEMAS = {
         ],
         // NOTE: first_audit & major_tax_issue temporarily excluded (near-zero coefficients with n=15)
         // Re-add when data reaches 25+ records
+        // subsidiary_count removed (effect was small and its direction unstable)
+        // industry & staff_quality removed (adding them did not improve cross-validation error)
         regressionFeatures: [
-            'total_assets', 'annual_revenue', 'industry', 'subsidiary_count',
-            'staff_quality', 'financial_audit', 'audit_risk'
+            'total_assets', 'annual_revenue', 'financial_audit', 'audit_risk'
         ],
+        // Log model: ln(price) = b0 + b·x; size features enter as ln(1 + x)
+        // so a few very large clients don't dominate the fit
+        logModel: true,
+        logFeatures: ['total_assets', 'annual_revenue'],
         featureLabels: {
             total_assets: '資產總額', annual_revenue: '年度營業額',
-            industry: '行業別加權', subsidiary_count: '關係公司數',
+            industry: '行業別加權',
             first_audit: '首次查核', staff_quality: '會計素質（反向）',
             major_tax_issue: '重大稅務調整', financial_audit: '財務簽核',
             audit_risk: '查帳風險'
@@ -224,33 +234,106 @@ function multipleLinearRegression(X_raw, y) {
 }
 
 /**
- * Encode a record's features for regression.
- * Industry is treated as a numeric "complexity weight" (3=製造, etc.)
+ * Encode one feature value for regression.
+ * Industry is treated as a numeric "complexity weight" (3=製造, etc.),
+ * or as a 0/1 flag for 控股投資／投資顧問業 when schema.industryEncoding === 'holding'
  * Staff quality is inverted: lower quality = more effort = higher price
+ * Features listed in schema.logFeatures are transformed to ln(1 + x)
  */
-function encodeFeatures(record, features) {
+function encodeValue(key, v, schema) {
     const INDUSTRY_WEIGHT = { 1: 1, 2: 1.5, 3: 2.5, 4: 2, 5: 3, 6: 1, 7: 2, 8: 2.5 };
-    return features.map(key => {
-        const v = parseFloat(record[key]) || 0;
-        if (key === 'industry') return INDUSTRY_WEIGHT[v] || 1;
-        if (key === 'staff_quality') return (11 - v); // invert: lower quality → higher number → positive coefficient
-        return v;
-    });
+    if (key === 'industry') {
+        if (schema.industryEncoding === 'holding') return (v === 7 || v === 8) ? 1 : 0;
+        return INDUSTRY_WEIGHT[v] || 1;
+    }
+    if (key === 'staff_quality') return (11 - v); // invert: lower quality → higher number → positive coefficient
+    if ((schema.logFeatures || []).includes(key)) return Math.log1p(Math.max(0, v));
+    return v;
+}
+
+function encodeFeatures(record, features, schema) {
+    return features.map(key => encodeValue(key, parseFloat(record[key]) || 0, schema));
+}
+
+// A feature needs at least this many records that differ from its most common value
+// to be estimated; otherwise it is left out (e.g. 營業稅 when every client has it)
+const MIN_VARIATION = 5;
+
+function hasEnoughVariation(values) {
+    const counts = {};
+    values.forEach(v => { counts[v] = (counts[v] || 0) + 1; });
+    const modeCount = Math.max(...Object.values(counts));
+    return values.length - modeCount >= MIN_VARIATION;
+}
+
+/**
+ * Leave-one-out cross validation: refit without each record, predict it,
+ * and report the median % error and the share of records within ±25%.
+ */
+function crossValidate(X, price, logModel) {
+    const y = logModel ? price.map(Math.log) : price;
+    const errors = [];
+    for (let i = 0; i < X.length; i++) {
+        const fit = multipleLinearRegression(X.filter((_, j) => j !== i), y.filter((_, j) => j !== i));
+        if (!fit) return null;
+        const linear = fit.intercept + X[i].reduce((s, v, k) => s + v * fit.coefficients[k], 0);
+        const predicted = logModel ? Math.exp(linear) : linear;
+        errors.push(Math.abs(predicted - price[i]) / price[i]);
+    }
+    const sorted = [...errors].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    return { medianError: median, within25: errors.filter(e => e <= 0.25).length / errors.length };
 }
 
 function runRegression(svcType) {
     const schema = SCHEMAS[svcType];
     const records = state.data[svcType];
-    const features = schema.regressionFeatures;
 
     if (records.length < 3) return null;
 
-    const X = records.map(r => encodeFeatures(r, features));
-    const y = records.map(r => parseFloat(r.price));
+    const features = schema.regressionFeatures.filter(key =>
+        hasEnoughVariation(records.map(r => encodeValue(key, parseFloat(r[key]) || 0, schema))));
+    const droppedFeatures = schema.regressionFeatures.filter(key => !features.includes(key));
+    if (features.length === 0) return null;
+
+    const X = records.map(r => encodeFeatures(r, features, schema));
+    const price = records.map(r => parseFloat(r.price));
+    const logModel = !!schema.logModel;
+    if (price.some(v => !(v > 0))) return null;
+    const y = logModel ? price.map(Math.log) : price;
 
     const result = multipleLinearRegression(X, y);
     if (!result) return null;
+    result.cv = records.length >= 10 ? crossValidate(X, price, logModel) : null;
+
+    // Historical values of each numeric input, to warn when a quote is outside well-covered data
+    result.featureValues = {};
+    features.forEach(key => {
+        const field = schema.fields.find(f => f.key === key);
+        if (!field || field.type !== 'number') return;
+        result.featureValues[key] = records.map(r => parseFloat(r[key]) || 0);
+    });
+
+    if (logModel) {
+        // Keep the log-scale spread for the price range, then report fit stats in NT$
+        result.logRmse = result.rmse;
+        result.predictions = result.predictions.map(Math.exp);
+        const n = price.length, p = features.length;
+        const mean = price.reduce((a, b) => a + b, 0) / n;
+        const ssTot = price.reduce((s, v) => s + (v - mean) ** 2, 0);
+        const ssRes = price.reduce((s, v, i) => s + (v - result.predictions[i]) ** 2, 0);
+        result.rSquared = 1 - ssRes / ssTot;
+        const dof = n - p - 1;
+        result.adjustedRSquared = dof > 0 ? 1 - (1 - result.rSquared) * (n - 1) / dof : null;
+        result.rmse = Math.sqrt(ssRes / n);
+        result.residuals = price.map((v, i) => v - result.predictions[i]);
+    }
+    // Snapshot of the fitted rows, so the gap export matches the analysis even if data changes later
+    result.records = records.map(r => ({ company: r.company, date: r.date, price: parseFloat(r.price) }));
+    result.logModel = logModel;
     result.features = features;
+    result.droppedFeatures = droppedFeatures;
     result.featureLabels = schema.featureLabels;
     return result;
 }
@@ -276,18 +359,18 @@ const DEMO_DATA = {
         { id: uid(), company: 'Lantern Hospitality (Demo)', date: '2024-03', monthly_vouchers: 350, revenue_level: 3, employee_count: 45, industry: 1, add_tax_vat: 1, add_tax_withholding: 1, add_invoice: 1, add_payroll: 1, staff_quality: 4, major_tax_issue: 0, price: 25000 },
     ],
     audit: [
-        { id: uid(), company: 'Maple Technology (Demo)', date: '2022-12', total_assets: 8000, annual_revenue: 15000, industry: 1, subsidiary_count: 0, first_audit: 0, staff_quality: 8, major_tax_issue: 0, financial_audit: 0, audit_risk: 1, price: 60000 },
-        { id: uid(), company: 'Northstar Manufacturing (Demo)', date: '2022-12', total_assets: 20000, annual_revenue: 30000, industry: 3, subsidiary_count: 2, first_audit: 0, staff_quality: 6, major_tax_issue: 1, financial_audit: 0, audit_risk: 2, price: 120000 },
-        { id: uid(), company: 'Orchid Construction (Demo)', date: '2023-01', total_assets: 50000, annual_revenue: 20000, industry: 4, subsidiary_count: 3, first_audit: 1, staff_quality: 4, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 200000 },
-        { id: uid(), company: 'Pine Retail Group (Demo)', date: '2023-02', total_assets: 5000, annual_revenue: 12000, industry: 2, subsidiary_count: 1, first_audit: 0, staff_quality: 7, major_tax_issue: 0, financial_audit: 0, audit_risk: 1, price: 50000 },
-        { id: uid(), company: 'Quartz Financial (Demo)', date: '2023-03', total_assets: 200000, annual_revenue: 50000, industry: 5, subsidiary_count: 5, first_audit: 0, staff_quality: 9, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 350000 },
-        { id: uid(), company: 'Riverstone Foods (Demo)', date: '2023-04', total_assets: 12000, annual_revenue: 18000, industry: 3, subsidiary_count: 1, first_audit: 1, staff_quality: 5, major_tax_issue: 0, financial_audit: 0, audit_risk: 2, price: 90000 },
-        { id: uid(), company: 'Silverline Electronics (Demo)', date: '2023-05', total_assets: 30000, annual_revenue: 40000, industry: 1, subsidiary_count: 2, first_audit: 0, staff_quality: 7, major_tax_issue: 1, financial_audit: 0, audit_risk: 2, price: 150000 },
-        { id: uid(), company: 'Tideway Properties (Demo)', date: '2023-06', total_assets: 80000, annual_revenue: 25000, industry: 4, subsidiary_count: 4, first_audit: 0, staff_quality: 3, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 280000 },
-        { id: uid(), company: 'Umbra Commerce (Demo)', date: '2023-07', total_assets: 9000, annual_revenue: 22000, industry: 2, subsidiary_count: 0, first_audit: 0, staff_quality: 8, major_tax_issue: 0, financial_audit: 0, audit_risk: 1, price: 55000 },
-        { id: uid(), company: 'Valley Forge Machinery (Demo)', date: '2023-08', total_assets: 45000, annual_revenue: 60000, industry: 3, subsidiary_count: 3, first_audit: 1, staff_quality: 6, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 230000 },
-        { id: uid(), company: 'Willow Engineering (Demo)', date: '2023-09', total_assets: 15000, annual_revenue: 10000, industry: 1, subsidiary_count: 0, first_audit: 1, staff_quality: 7, major_tax_issue: 0, financial_audit: 0, audit_risk: 2, price: 70000 },
-        { id: uid(), company: 'Zenith Development (Demo)', date: '2023-10', total_assets: 100000, annual_revenue: 35000, industry: 4, subsidiary_count: 6, first_audit: 0, staff_quality: 5, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 310000 },
+        { id: uid(), company: 'Maple Technology (Demo)', date: '2022-12', total_assets: 8000, annual_revenue: 15000, industry: 1, first_audit: 0, staff_quality: 8, major_tax_issue: 0, financial_audit: 0, audit_risk: 1, price: 60000 },
+        { id: uid(), company: 'Northstar Manufacturing (Demo)', date: '2022-12', total_assets: 20000, annual_revenue: 30000, industry: 3, first_audit: 0, staff_quality: 6, major_tax_issue: 1, financial_audit: 0, audit_risk: 2, price: 120000 },
+        { id: uid(), company: 'Orchid Construction (Demo)', date: '2023-01', total_assets: 50000, annual_revenue: 20000, industry: 4, first_audit: 1, staff_quality: 4, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 200000 },
+        { id: uid(), company: 'Pine Retail Group (Demo)', date: '2023-02', total_assets: 5000, annual_revenue: 12000, industry: 2, first_audit: 0, staff_quality: 7, major_tax_issue: 0, financial_audit: 0, audit_risk: 1, price: 50000 },
+        { id: uid(), company: 'Quartz Financial (Demo)', date: '2023-03', total_assets: 200000, annual_revenue: 50000, industry: 5, first_audit: 0, staff_quality: 9, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 350000 },
+        { id: uid(), company: 'Riverstone Foods (Demo)', date: '2023-04', total_assets: 12000, annual_revenue: 18000, industry: 3, first_audit: 1, staff_quality: 5, major_tax_issue: 0, financial_audit: 0, audit_risk: 2, price: 90000 },
+        { id: uid(), company: 'Silverline Electronics (Demo)', date: '2023-05', total_assets: 30000, annual_revenue: 40000, industry: 1, first_audit: 0, staff_quality: 7, major_tax_issue: 1, financial_audit: 0, audit_risk: 2, price: 150000 },
+        { id: uid(), company: 'Tideway Properties (Demo)', date: '2023-06', total_assets: 80000, annual_revenue: 25000, industry: 4, first_audit: 0, staff_quality: 3, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 280000 },
+        { id: uid(), company: 'Umbra Commerce (Demo)', date: '2023-07', total_assets: 9000, annual_revenue: 22000, industry: 2, first_audit: 0, staff_quality: 8, major_tax_issue: 0, financial_audit: 0, audit_risk: 1, price: 55000 },
+        { id: uid(), company: 'Valley Forge Machinery (Demo)', date: '2023-08', total_assets: 45000, annual_revenue: 60000, industry: 3, first_audit: 1, staff_quality: 6, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 230000 },
+        { id: uid(), company: 'Willow Engineering (Demo)', date: '2023-09', total_assets: 15000, annual_revenue: 10000, industry: 1, first_audit: 1, staff_quality: 7, major_tax_issue: 0, financial_audit: 0, audit_risk: 2, price: 70000 },
+        { id: uid(), company: 'Zenith Development (Demo)', date: '2023-10', total_assets: 100000, annual_revenue: 35000, industry: 4, first_audit: 0, staff_quality: 5, major_tax_issue: 1, financial_audit: 1, audit_risk: 3, price: 310000 },
     ]
 };
 
@@ -343,7 +426,6 @@ const TABLE_COLUMNS_AUDIT = [
     { key: 'total_assets', label: '資產（萬）', render: v => Number(v).toLocaleString() },
     { key: 'annual_revenue', label: '營收（萬）', render: v => Number(v).toLocaleString() },
     { key: 'industry', label: '行業', render: v => INDUSTRIES[v] || v },
-    { key: 'subsidiary_count', label: '關係公司數' },
     { key: 'first_audit', label: '首次查核', render: v => v == 1 ? '⭐ 是' : '—' },
     { key: 'staff_quality', label: '會計素質', render: v => renderQuality(v) },
     { key: 'major_tax_issue', label: '重大稅務', render: v => v == 1 ? '⚠️ 有' : '—' },
@@ -515,30 +597,76 @@ function deleteRecord(id, svcType) {
 // 9. CSV IMPORT / EXPORT
 // ──────────────────────────────────────────────
 
+function parseImportedRows(rows, svcType) {
+    const schema = SCHEMAS[svcType];
+    return rows.map(row => {
+        const record = { id: uid() };
+        for (const field of schema.fields) {
+            const raw = row[field.key];
+            if (field.type === 'number' || field.type === 'select' || field.type === 'quality') {
+                record[field.key] = parseFloat(raw) || 0;
+            } else if (field.type === 'bool') {
+                record[field.key] = (raw === '1' || raw === 'true' || raw === '是') ? 1 : 0;
+            } else {
+                record[field.key] = raw || '';
+            }
+        }
+        return record;
+    });
+}
+
+// 已有資料時先詢問「取代」或「加在後面」，避免重複匯入
+function applyImport(svcType, imported, sourceLabel) {
+    const label = SCHEMAS[svcType].label;
+    const commit = (mode) => {
+        if (mode === 'replace') {
+            state.data[svcType] = imported;
+            state.models[svcType] = null;
+        } else {
+            state.data[svcType].push(...imported);
+        }
+        saveData();
+        renderTable(svcType);
+        const verb = mode === 'replace' ? '取代為' : '匯入';
+        showToast(`成功${sourceLabel}${verb} ${imported.length} 筆${label}數據 ✅`);
+    };
+    const existing = state.data[svcType].length;
+    if (existing === 0) { commit('append'); return; }
+
+    document.getElementById('import-choice-text').innerHTML =
+        `目前已有 <strong>${existing}</strong> 筆${label}數據，這次要匯入 <strong>${imported.length}</strong> 筆。<br>` +
+        `如果是同一份檔案再匯入一次，請選「取代現有資料」，否則資料會重複。`;
+    const overlay = document.getElementById('import-choice-overlay');
+    overlay.classList.add('open');
+    const close = () => {
+        overlay.classList.remove('open');
+        overlay.onclick = null;
+    };
+    document.getElementById('btn-import-replace').onclick = () => { close(); commit('replace'); };
+    document.getElementById('btn-import-append').onclick = () => { close(); commit('append'); };
+    document.getElementById('btn-import-cancel').onclick = () => { close(); showToast('已取消匯入', 'info'); };
+    overlay.onclick = e => { if (e.target === overlay) { close(); showToast('已取消匯入', 'info'); } };
+}
+
+function clearData(svcType) {
+    const label = SCHEMAS[svcType].label;
+    const n = state.data[svcType].length;
+    if (n === 0) { showToast(`目前沒有${label}數據`, 'info'); return; }
+    if (!confirm(`確定要清空全部 ${n} 筆${label}數據嗎？\n此動作無法復原，建議先按「匯出 CSV」備份。`)) return;
+    state.data[svcType] = [];
+    state.models[svcType] = null;
+    saveData();
+    renderTable(svcType);
+    showToast(`已清空${label}數據`);
+}
+
 function importCSV(file, svcType) {
     Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-            const schema = SCHEMAS[svcType];
-            const imported = results.data.map(row => {
-                const record = { id: uid() };
-                for (const field of schema.fields) {
-                    const raw = row[field.key];
-                    if (field.type === 'number' || field.type === 'select' || field.type === 'quality') {
-                        record[field.key] = parseFloat(raw) || 0;
-                    } else if (field.type === 'bool') {
-                        record[field.key] = (raw === '1' || raw === 'true' || raw === '是') ? 1 : 0;
-                    } else {
-                        record[field.key] = raw || '';
-                    }
-                }
-                return record;
-            });
-            state.data[svcType].push(...imported);
-            saveData();
-            renderTable(svcType);
-            showToast(`成功匯入 ${imported.length} 筆${SCHEMAS[svcType].label}數據 ✅`);
+            const imported = parseImportedRows(results.data, svcType);
+            applyImport(svcType, imported, '');
         },
         error: () => showToast('CSV 解析失敗，請確認格式正確', 'error')
     });
@@ -562,6 +690,46 @@ function exportCSV(svcType) {
     a.click();
     URL.revokeObjectURL(url);
     showToast('CSV 已匯出 ✅');
+}
+
+function csvCell(v) {
+    const str = String(v ?? '');
+    return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+// 每家客戶的實際報價 vs 模型預測，依差距% 由低到高排序（最偏低的在最上面）
+function exportGapCSV() {
+    const svcType = state.activeService.analysis;
+    const model = state.models[svcType];
+    if (!model) { showToast('請先執行回歸分析，再匯出差距表', 'info'); return; }
+    const schema = SCHEMAS[svcType];
+    const spread = model.logModel ? Math.exp(1.5 * model.logRmse) : null;
+    const rows = model.records.map((r, i) => {
+        const pred = model.predictions[i];
+        const low = model.logModel ? pred / spread : pred - 1.5 * model.rmse;
+        const high = model.logModel ? pred * spread : pred + 1.5 * model.rmse;
+        const gap = r.price - pred;
+        const status = r.price < low ? '偏低（低於合理區間）' : r.price > high ? '偏高（高於合理區間）' : '合理範圍內';
+        return { ...r, pred, low, high, gap, gapPct: gap / pred, status };
+    }).sort((a, b) => a.gapPct - b.gapPct);
+
+    const headers = ['公司名稱', '日期', '實際報價', '模型預測', '合理區間下限', '合理區間上限', '差距（實際-預測）', '差距%', '判斷'];
+    const lines = rows.map(r => [
+        r.company, r.date, Math.round(r.price), Math.round(r.pred),
+        Math.round(Math.max(0, r.low)), Math.round(r.high), Math.round(r.gap),
+        (r.gapPct * 100).toFixed(1) + '%', r.status
+    ].map(csvCell).join(','));
+    const csv = [headers.join(','), ...lines].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `報價差距_${schema.label.replace(/[（）()]/g, '')}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    const low = rows.filter(r => r.status.startsWith('偏低')).length;
+    const high = rows.filter(r => r.status.startsWith('偏高')).length;
+    showToast(`已匯出 ${rows.length} 家差距表（偏低 ${low} 家、偏高 ${high} 家）✅`);
 }
 
 // ──────────────────────────────────────────────
@@ -610,26 +778,9 @@ async function importFromGoogleSheets() {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                const schema = SCHEMAS[svcType];
-                const imported = results.data.map(row => {
-                    const record = { id: uid() };
-                    for (const field of schema.fields) {
-                        const raw = row[field.key];
-                        if (field.type === 'number' || field.type === 'select' || field.type === 'quality') {
-                            record[field.key] = parseFloat(raw) || 0;
-                        } else if (field.type === 'bool') {
-                            record[field.key] = (raw === '1' || raw === 'true' || raw === '是') ? 1 : 0;
-                        } else {
-                            record[field.key] = raw || '';
-                        }
-                    }
-                    return record;
-                });
-                state.data[svcType].push(...imported);
-                saveData();
-                renderTable(svcType);
-                showToast(`成功從 Google Sheets 匯入 ${imported.length} 筆${SCHEMAS[svcType].label}數據 ✅`);
+                const imported = parseImportedRows(results.data, svcType);
                 closeGsPanel();
+                applyImport(svcType, imported, '從 Google Sheets ');
             }
         });
     } catch (err) {
@@ -682,6 +833,8 @@ function runAnalysis() {
     renderCoefficients(model, svcType);
     renderFormula(model, svcType);
     renderAnalysisChart(model, records, svcType);
+    // The calculator only asks for factors the fitted model uses
+    if (state.activeService.calculator === svcType) buildCalculatorForm(svcType);
     showToast('回歸分析完成 🎉', 'success');
 }
 
@@ -692,13 +845,21 @@ function renderModelSummary(model, svcType) {
         : '<span style="font-size:12px;color:#f87171" title="樣本數不足以計算此指標（建議增加數據至少達因子數+2筆以上）">N/A ⚠️</span>';
     const rmse = Math.round(model.rmse).toLocaleString();
     const n = state.data[svcType].length;
+    const schema = SCHEMAS[svcType];
+    const cvStats = model.cv ? `
+      <div class="stat-item" title="每次拿掉一筆、用其餘資料建模後預測它；比 R² 更接近實際報價的準確度"><div class="stat-label">驗證誤差（中位數）</div><div class="stat-value">${(model.cv.medianError * 100).toFixed(1)}%</div></div>
+      <div class="stat-item" title="交叉驗證下，預測值落在實際公費 ±25% 內的比例"><div class="stat-label">±25% 內命中</div><div class="stat-value">${Math.round(model.cv.within25 * 100)}%</div></div>` : '';
+    const dropped = model.droppedFeatures.length > 0
+        ? `<div class="model-note">資料變化不足、未納入模型：${model.droppedFeatures.map(k => schema.featureLabels[k] || k).join('、')}（不同值少於 ${MIN_VARIATION} 筆）</div>`
+        : '';
     document.getElementById('model-summary-content').innerHTML = `
     <div class="model-stats">
       <div class="stat-item"><div class="stat-label">樣本數</div><div class="stat-value">${n}</div></div>
       <div class="stat-item"><div class="stat-label">Adj. R²</div><div class="stat-value">${adjR2}</div></div>
       <div class="stat-item"><div class="stat-label">RMSE</div><div class="stat-value" style="font-size:16px">${rmse}</div></div>
-      <div class="stat-item"><div class="stat-label">R²</div><div class="stat-value">${r2}%</div></div>
+      <div class="stat-item"><div class="stat-label">R²</div><div class="stat-value">${r2}%</div></div>${cvStats}
     </div>
+    ${dropped}
     <div class="r2-bar-wrap">
       <div class="r2-bar-label"><span>模型解釋力 R²</span><span>${r2}%</span></div>
       <div class="r2-bar"><div class="r2-bar-fill" style="width:0%" id="r2-fill"></div></div>
@@ -709,29 +870,51 @@ function renderModelSummary(model, svcType) {
     }, 50);
 }
 
+/**
+ * Log model: express a coefficient as a % price effect.
+ * Log features → effect when the value doubles; others → effect per +1.
+ */
+function logEffectPct(key, coef, schema) {
+    const isLogFeature = (schema.logFeatures || []).includes(key);
+    return ((isLogFeature ? Math.pow(2, coef) : Math.exp(coef)) - 1) * 100;
+}
+
 function renderCoefficients(model, svcType) {
     const schema = SCHEMAS[svcType];
-    const maxAbs = Math.max(...model.coefficients.map(Math.abs), 1);
+    const shown = model.features.map((key, i) => model.logModel
+        ? logEffectPct(key, model.coefficients[i], schema)
+        : model.coefficients[i]);
+    const maxAbs = Math.max(...shown.map(Math.abs), 1);
     const items = model.features.map((key, i) => {
-        const coef = model.coefficients[i];
+        const coef = shown[i];
         const pct = Math.abs(coef) / maxAbs * 100;
         const isPos = coef >= 0;
         const bar = isPos
             ? `<div class="coef-bar-pos" style="width:${pct}%"></div>`
             : `<div class="coef-bar-neg" style="width:${pct}%"></div>`;
+        const label = schema.featureLabels[key] || key;
+        const name = model.logModel && (schema.logFeatures || []).includes(key) ? `${label}（加倍）` : label;
+        const value = model.logModel ? `${coef.toFixed(1)}%` : coef.toFixed(1);
         return `<div class="coef-item">
-      <span class="coef-name">${schema.featureLabels[key] || key}</span>
+      <span class="coef-name">${name}</span>
       <div class="coef-bar-wrap">${bar}</div>
-      <span class="coef-value ${isPos ? 'positive' : 'negative'}">${isPos ? '+' : ''}${coef.toFixed(1)}</span>
+      <span class="coef-value ${isPos ? 'positive' : 'negative'}">${isPos ? '+' : ''}${value}</span>
     </div>`;
     }).join('');
-    document.getElementById('coefficients-content').innerHTML = `
-    <div class="coef-list">
-      <div class="coef-item">
+    const base = model.logModel
+        ? `<div class="coef-item">
+        <span class="coef-name">對數截距 ln(報價)</span>
+        <div class="coef-bar-wrap"><div class="coef-bar-pos" style="width:30%"></div></div>
+        <span class="coef-value contribution-base">${model.intercept.toFixed(3)}</span>
+      </div>`
+        : `<div class="coef-item">
         <span class="coef-name">基準報價（截距）</span>
         <div class="coef-bar-wrap"><div class="coef-bar-pos" style="width:30%"></div></div>
         <span class="coef-value contribution-base">${Math.round(model.intercept).toLocaleString()}</span>
-      </div>
+      </div>`;
+    document.getElementById('coefficients-content').innerHTML = `
+    <div class="coef-list">
+      ${base}
       ${items}
     </div>`;
 }
@@ -743,11 +926,14 @@ function renderFormula(model, svcType) {
         const coef = model.coefficients[i];
         const sign = coef >= 0 ? '+' : '-';
         const label = schema.featureLabels[key] || key;
-        return `  ${sign} ${Math.abs(coef).toFixed(2)} × [${label}]`;
+        const term = model.logModel && (schema.logFeatures || []).includes(key) ? `ln(1 + ${label})` : label;
+        return `  ${sign} ${Math.abs(coef).toFixed(model.logModel ? 4 : 2)} × [${term}]`;
     }).join('\n');
+    const lhs = model.logModel ? `ln(報價（${unit}）)` : `報價（${unit}）`;
+    const base = model.logModel ? model.intercept.toFixed(4) : Math.round(model.intercept).toLocaleString();
     document.getElementById('formula-box').innerHTML = `
-    <pre style="white-space:pre-wrap;font-size:13px;line-height:1.9;color:#34d399">報價（${unit}）=
-  ${Math.round(model.intercept).toLocaleString()}（基準）
+    <pre style="white-space:pre-wrap;font-size:13px;line-height:1.9;color:#34d399">${lhs} =
+  ${base}（基準）
 ${terms}</pre>`;
 }
 
@@ -814,7 +1000,9 @@ function renderAnalysisChart(model, records, svcType) {
 
 function buildCalculatorForm(svcType) {
     const schema = SCHEMAS[svcType];
-    const fields = schema.fields.filter(f => f.key !== 'price' && f.key !== 'company' && f.key !== 'date');
+    // Only ask for the factors the model actually uses
+    const used = state.models[svcType] ? state.models[svcType].features : schema.regressionFeatures;
+    const fields = schema.fields.filter(f => used.includes(f.key));
     const boolFields = fields.filter(f => f.type === 'bool');
     const otherFields = fields.filter(f => f.type !== 'bool');
 
@@ -865,8 +1053,7 @@ function calculatePrice() {
         return;
     }
     const schema = SCHEMAS[svcType];
-    const INDUSTRY_WEIGHT = { 1: 1, 2: 1.5, 3: 2.5, 4: 2, 5: 3, 6: 1, 7: 2, 8: 2.5 };
-    const features = schema.regressionFeatures;
+    const features = model.features;
 
     const encoded = features.map(key => {
         const field = schema.fields.find(f => f.key === key);
@@ -879,23 +1066,55 @@ function calculatePrice() {
             const el = document.getElementById(`calc-${key}`);
             val = el ? parseFloat(el.value) || 0 : 0;
         }
-        if (key === 'industry') return INDUSTRY_WEIGHT[val] || 1;
-        if (key === 'staff_quality') return 11 - val;
-        return val;
+        return encodeValue(key, val, schema);
     });
 
-    const predicted = model.intercept + encoded.reduce((s, v, i) => s + v * model.coefficients[i], 0);
+    const linear = model.intercept + encoded.reduce((s, v, i) => s + v * model.coefficients[i], 0);
     const minPrice = MIN_PRICE[svcType] || 0;
+    let predicted, low, high, contributions, baseText;
+    if (model.logModel) {
+        // ln(price) model: range = ±1.5σ in log scale, i.e. a proportional band
+        predicted = Math.exp(linear);
+        const s = model.logRmse;
+        low = Math.max(minPrice, Math.round(predicted * Math.exp(-1.5 * s)));
+        high = Math.round(predicted * Math.exp(1.5 * s));
+        baseText = `NT$${Math.round(Math.exp(model.intercept)).toLocaleString()}`;
+        contributions = features.map((key, i) => {
+            const mult = Math.exp(encoded[i] * model.coefficients[i]);
+            return { label: schema.featureLabels[key] || key, positive: mult >= 1, text: `×${mult.toFixed(2)}` };
+        });
+    } else {
+        predicted = linear;
+        low = Math.max(minPrice, Math.round(predicted - 1.5 * model.rmse));
+        high = Math.round(predicted + 1.5 * model.rmse);
+        baseText = `+${Math.round(model.intercept).toLocaleString()}`;
+        contributions = features.map((key, i) => {
+            const value = Math.round(encoded[i] * model.coefficients[i]);
+            return { label: schema.featureLabels[key] || key, positive: value >= 0, text: `${value >= 0 ? '+' : ''}${value.toLocaleString()}` };
+        });
+    }
     const price = Math.max(minPrice, Math.round(predicted));
-    const rmse = model.rmse;
-    const low = Math.max(minPrice, Math.round(predicted - 1.5 * rmse));
-    const high = Math.round(predicted + 1.5 * rmse);
+    // When the minimum price kicks in, keep the range from inverting (low > high)
+    high = Math.max(high, price);
 
-    // Factor contributions
-    const contributions = model.features.map((key, i) => ({
-        label: schema.featureLabels[key] || key,
-        value: Math.round(encoded[i] * model.coefficients[i])
-    }));
+    // Fewer than MIN_COMPARABLE past clients at least this large (or small) → the model has little to go on
+    const MIN_COMPARABLE = 3;
+    const rangeWarnings = features.filter(key => model.featureValues[key]).map(key => {
+        const el = document.getElementById(`calc-${key}`);
+        const val = el ? parseFloat(el.value) || 0 : 0;
+        const history = model.featureValues[key];
+        const label = schema.featureLabels[key] || key;
+        const atLeast = history.filter(v => v >= val).length;
+        const atMost = history.filter(v => v <= val).length;
+        if (atLeast < MIN_COMPARABLE) return `${label} ${val.toLocaleString()}：歷史資料中只有 ${atLeast} 家達到這個規模（最高 ${Math.max(...history).toLocaleString()}）`;
+        if (atMost < MIN_COMPARABLE) return `${label} ${val.toLocaleString()}：歷史資料中只有 ${atMost} 家這麼小（最低 ${Math.min(...history).toLocaleString()}）`;
+        return null;
+    }).filter(Boolean);
+    const warningHtml = rangeWarnings.length > 0 ? `
+      <div class="price-warning">
+        <div class="price-warning-title">⚠️ 超出模型資料範圍，建議價僅供參考，請個別評估</div>
+        ${rangeWarnings.map(w => `<div>${w}</div>`).join('')}
+      </div>` : '';
 
     document.getElementById('calc-result').innerHTML = `
     <div class="calc-result-main">
@@ -904,6 +1123,7 @@ function calculatePrice() {
         <div class="price-amount">NT$${price.toLocaleString()}</div>
         <div class="price-unit">${SCHEMAS[svcType].priceUnit}</div>
       </div>
+      ${warningHtml}
       <div class="price-range" style="width:100%">
         <div class="price-range-label">建議區間（±1.5σ）</div>
         <div class="price-range-value">NT$${low.toLocaleString()} ～ NT$${high.toLocaleString()}</div>
@@ -913,14 +1133,13 @@ function calculatePrice() {
         <div class="factor-breakdown-list">
           <div class="factor-row">
             <span class="factor-row-name">基準報價</span>
-            <span class="factor-row-contribution contribution-base">+${Math.round(model.intercept).toLocaleString()}</span>
+            <span class="factor-row-contribution contribution-base">${baseText}</span>
           </div>
           ${contributions.map(c => {
-        const cls = c.value >= 0 ? 'contribution-pos' : 'contribution-neg';
-        const sign = c.value >= 0 ? '+' : '';
+        const cls = c.positive ? 'contribution-pos' : 'contribution-neg';
         return `<div class="factor-row">
               <span class="factor-row-name">${c.label}</span>
-              <span class="factor-row-contribution ${cls}">${sign}${c.value.toLocaleString()}</span>
+              <span class="factor-row-contribution ${cls}">${c.text}</span>
             </div>`;
     }).join('')}
         </div>
@@ -1008,8 +1227,12 @@ function init() {
         showToast(`已載入 ${DEMO_DATA[svc].length} 筆範例數據 🎉`);
     });
 
+    // Clear data
+    document.getElementById('btn-clear-data').addEventListener('click', () => clearData(state.activeService.data));
+
     // Run analysis
     document.getElementById('btn-run-analysis').addEventListener('click', runAnalysis);
+    document.getElementById('btn-export-gap').addEventListener('click', exportGapCSV);
 
     // Calculate price
     document.getElementById('btn-calculate').addEventListener('click', calculatePrice);

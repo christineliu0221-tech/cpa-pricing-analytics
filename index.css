@@ -802,6 +802,29 @@ body {
   color: var(--text-secondary);
 }
 
+.price-warning {
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  width: 100%;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.price-warning-title {
+  color: var(--gold-400);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.model-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
 .factor-breakdown {
   width: 100%;
 }
@@ -1241,6 +1264,22 @@ body {
   letter-spacing: 0.02em;
   opacity: 0.88;
   min-height: 18px;
+}
+.modal-small {
+  max-width: 480px;
+}
+
+.import-choice-text {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.import-choice-text strong {
+  color: var(--text-primary);
+}
+
+.btn-export-gap {
+  margin-top: 10px;
 }
 
 /* Public portfolio data notice */

@@ -16,9 +16,12 @@ The project combines my accounting-domain experience with AI-assisted product de
 
 - Manages historical bookkeeping and annual tax-attestation engagements.
 - Imports and exports CSV data and supports published Google Sheets CSV links.
-- Fits an Ordinary Least Squares multiple linear regression model in the browser.
-- Reports R², adjusted R², RMSE, coefficients, and per-factor contribution.
-- Produces an indicative fee and a range based on `prediction ± 1.5 × RMSE`.
+- Fits a log-linear OLS regression in the browser: `ln(fee)` on log-scaled size drivers (vouchers, headcount, assets, revenue) plus engagement flags, so each factor reads as a percentage effect.
+- Automatically leaves out factors with too little variation in the data (fewer than 5 records differ) and says which ones.
+- Reports R², adjusted R², RMSE, leave-one-out cross-validation error (median % error and share within ±25%), coefficients, and per-factor contribution.
+- Produces an indicative fee and a proportional range (`prediction × e^(±1.5σ)` on the log scale), and warns when an engagement is larger or smaller than almost everything in the history.
+- Exports a per-client gap report (actual fee vs. model estimate, range, and below / within / above-range flag) to CSV.
+- Asks whether to replace or append when importing into a non-empty dataset, and can clear a service's data in one click.
 - Stores user-entered data locally in the browser; the demo has no application backend.
 
 ## Product workflow
@@ -26,9 +29,10 @@ The project combines my accounting-domain experience with AI-assisted product de
 ```mermaid
 flowchart LR
     A[Historical engagement data] --> B[Feature encoding]
-    B --> C[OLS regression]
-    C --> D[Model diagnostics]
+    B --> C[Log-linear OLS regression]
+    C --> D[Diagnostics and cross-validation]
     D --> E[Explainable fee reference]
+    D --> F[Per-client gap report]
 ```
 
 ## Technical highlights
@@ -36,7 +40,7 @@ flowchart LR
 - **Frontend:** semantic HTML, responsive CSS, vanilla JavaScript
 - **Data handling:** Papa Parse for CSV workflows
 - **Visualization:** Chart.js
-- **Modeling:** OLS solved with Gaussian elimination, implemented in JavaScript
+- **Modeling:** log-linear OLS solved with Gaussian elimination and leave-one-out cross-validation, implemented in JavaScript
 - **Persistence:** browser `localStorage`
 - **Architecture:** static, dependency-light, and deployable on GitHub Pages
 
@@ -63,9 +67,15 @@ The synthetic dataset loads automatically on your first visit.
 
 The product interface is intentionally in Traditional Chinese because it was designed for Taiwan CPA workflows. The repository documentation is in English for an international portfolio audience.
 
+## Why a log model
+
+Fees scale proportionally with engagement size: doubling a client's vouchers or assets raises effort by a similar percentage, not by a fixed amount. A linear model lets one very large client dominate the fit and can even flip the sign of a size factor. Taking logs keeps large clients from swamping the rest, makes the residuals more even across fee levels, and gives coefficients that are easy to explain ("+15% per doubling of monthly vouchers").
+
+In-sample R² flatters small datasets, so the analysis page also shows leave-one-out cross-validation error: each client is predicted by a model fitted without it.
+
 ## Responsible-use notes
 
-This is a portfolio prototype, not production pricing, accounting, tax, or audit advice. OLS estimates can be unstable with small or highly correlated datasets. A production system should add stronger validation, access controls, encrypted storage, model monitoring, and professional review.
+This is a portfolio prototype, not production pricing, accounting, tax, or audit advice. Regression estimates can be unstable with small or highly correlated datasets, and the cross-validation error is the better guide to how far a quote may be off. A production system should add stronger validation, access controls, encrypted storage, model monitoring, and professional review.
 
 ## Author
 

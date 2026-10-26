@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CPA Pricing Analytics — Portfolio Demo</title>
-  <meta name="description" content="A privacy-conscious pricing analytics portfolio project for Taiwan CPA workflows, powered by explainable OLS regression." />
+  <meta name="description" content="A privacy-conscious pricing analytics portfolio project for Taiwan CPA workflows, powered by explainable log-linear regression." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
@@ -103,6 +103,14 @@
           </svg>
           載入範例數據
         </button>
+        <button class="btn btn-danger" id="btn-clear-data">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          </svg>
+          清空資料
+        </button>
         <span class="record-count" id="record-count">共 0 筆</span>
       </div>
 
@@ -163,6 +171,14 @@
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
             執行回歸分析
+          </button>
+          <button class="btn btn-ghost btn-full btn-export-gap" id="btn-export-gap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            匯出各客戶報價差距 CSV
           </button>
         </div>
 
@@ -351,11 +367,6 @@
                 <td>1=服務業, 2=批發零售, 3=製造業, 4=建設業, 5=金融業, 6=其他, 7=控股投資公司, 8=投資顧問業</td>
               </tr>
               <tr>
-                <td>subsidiary_count</td>
-                <td>子/關係公司數量</td>
-                <td>整數</td>
-              </tr>
-              <tr>
                 <td>first_audit</td>
                 <td>是否首次查核</td>
                 <td>0=否, 1=是</td>
@@ -462,6 +473,23 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" id="btn-modal-cancel">取消</button>
         <button class="btn btn-primary" id="btn-modal-save">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 匯入方式 -->
+  <div class="modal-overlay" id="import-choice-overlay">
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h3>要怎麼匯入這份資料？</h3>
+      </div>
+      <div class="modal-body">
+        <p id="import-choice-text" class="import-choice-text"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-import-cancel">取消</button>
+        <button class="btn btn-secondary" id="btn-import-append">加在後面</button>
+        <button class="btn btn-primary" id="btn-import-replace">取代現有資料</button>
       </div>
     </div>
   </div>
